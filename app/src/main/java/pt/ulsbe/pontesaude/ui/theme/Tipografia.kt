@@ -6,6 +6,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
+/**
+ * Tipografia base padrão da aplicação.
+ */
 val TipografiaPadrao = Typography(
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,

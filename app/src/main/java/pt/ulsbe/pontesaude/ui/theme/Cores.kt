@@ -2,6 +2,9 @@ package pt.ulsbe.pontesaude.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Paleta de cores oficial da aplicação Ponte Saúde (identidade visual ULSBE).
+ */
 val Tinta = Color(0xFFFFFFFF)
 val Superficie = Color(0xFFF1F5FC)
 val Superficie2 = Color(0xFFE2EAF8)

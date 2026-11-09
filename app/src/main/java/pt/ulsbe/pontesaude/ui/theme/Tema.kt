@@ -7,6 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 
+/**
+ * Esquema de cores claro baseado nas diretrizes do Material 3 e tons da ULSBE.
+ */
 private val EsquemaCores = lightColorScheme(
     primary = MarcaMedio,
     onPrimary = Color.White,
@@ -22,6 +25,9 @@ private val EsquemaCores = lightColorScheme(
     error = Color(0xFFDC2626),
 )
 
+/**
+ * Tema principal da aplicação com suporte a modo de acessibilidade (texto ampliado).
+ */
 @Composable
 fun TemaPonteSaude(textoGrande: Boolean, content: @Composable () -> Unit) {
     val escala = if (textoGrande) 1.18f else 1f

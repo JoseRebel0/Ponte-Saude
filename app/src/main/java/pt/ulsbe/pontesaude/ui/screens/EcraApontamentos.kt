@@ -78,7 +78,6 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 /**
  * Ecrã de Notas e Apontamentos com o Tradutor Médico e Assistente IA no topo,
  * seguido do bloco de registo e gestão de notas clínicas do utente.
- * As perguntas simples foram removidas e a HUD está preparada para futura API de IA.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

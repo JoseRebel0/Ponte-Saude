@@ -80,7 +80,7 @@ import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
 /**
- * Ecrã de Consultas e Exames com checklist interativa, preparação para o utente e Pull-to-Refresh suave.
+ * Ecrã de Consultas e Exames com checklist interativa, preparação para o utente.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
