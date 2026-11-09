@@ -14,14 +14,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import pt.ulsbe.pontesaude.data.room.BaseDadosApp
-import pt.ulsbe.pontesaude.data.room.NotaEntity
-import pt.ulsbe.pontesaude.data.room.deserializarListaString
-import pt.ulsbe.pontesaude.data.room.deserializarVouchers
-import pt.ulsbe.pontesaude.data.room.paraEntidade
-import pt.ulsbe.pontesaude.data.room.paraModelo
-import pt.ulsbe.pontesaude.data.room.serializarListaString
-import pt.ulsbe.pontesaude.data.room.serializarVouchers
+import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
+import pt.ulsbe.pontesaude.data.local.deserializarListaString
+import pt.ulsbe.pontesaude.data.local.deserializarVouchers
+import pt.ulsbe.pontesaude.data.local.entity.NotaEntity
+import pt.ulsbe.pontesaude.data.local.paraEntidade
+import pt.ulsbe.pontesaude.data.local.paraModelo
+import pt.ulsbe.pontesaude.data.local.serializarListaString
+import pt.ulsbe.pontesaude.data.local.serializarVouchers
+import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
+import pt.ulsbe.pontesaude.data.remote.DadosPerfilRemoto
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -32,15 +34,21 @@ import pt.ulsbe.pontesaude.model.VideoBibliotecaSaude
 import pt.ulsbe.pontesaude.model.VoucherResgatado
 
 /**
- * Repositório principal da aplicação com arquitetura Offline-First:
- * - Base de dados local Room Database para funcionamento 100% offline.
- * - Sincronização automática bidirecional com o Google Cloud Firestore quando existe ligação.
- * - Tratamento de primeira abertura sem Internet.
+ * Repositório Central da Aplicação (Padrão Repository Pattern).
+ *
+ * Atua como Ponto Único da Verdade (Single Source of Truth) para toda a UI:
+ * - Orquestra a Base de Dados local Room (Offline-First).
+ * - Comunica com a API remota Cloud Firestore através de [ServicoFirestore].
+ * - Mantém o estado reativo em memória consumido pelo Jetpack Compose.
  */
 class RepositorioApp(context: Context) {
     private val preferencias = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
-    val dbRoom: BaseDadosApp = BaseDadosApp.obterInstancia(context)
-    val servicoFirestore = ServicoFirestore()
+
+    // Fonte de dados local (Room SQLite Database)
+    private val dbLocal: BaseDadosLocal = BaseDadosLocal.obterInstancia(context)
+
+    // Fonte de dados remota (Cliente de comunicação Firestore / API)
+    private val clienteFirestore = ClienteFirestore()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val listaMedicamentos = mutableStateMapOf<String, List<Medicamento>>()
@@ -101,7 +109,7 @@ class RepositorioApp(context: Context) {
             modoCuidador = false
             indicePerfilCuidado = 0
             scope.launch(Dispatchers.IO) {
-                servicoFirestore.limparTodasAssociacoesFirestore()
+                clienteFirestore.limparTodasAssociacoesFirestore()
             }
         }
 
@@ -336,7 +344,7 @@ class RepositorioApp(context: Context) {
         val vouch = vouchersResgatados.toList()
         scope.launch {
             runCatching {
-                servicoFirestore.atualizarDadosRecompensas(
+                clienteFirestore.atualizarDadosRecompensas(
                     idPerfil = idPerfil,
                     pontos = pts,
                     modulosConcluidos = concl,
@@ -370,10 +378,10 @@ class RepositorioApp(context: Context) {
         val med = lista.find { it.id == id }
         if (med != null) {
             scope.launch(Dispatchers.IO) {
-                dbRoom.medicamentoDao().inserirOuAtualizar(med.paraEntidade(perfil.id, !estaOnline))
+                dbLocal.medicamentoDao().inserirOuAtualizar(med.paraEntidade(perfil.id, !estaOnline))
             }
             if (estaOnline) {
-                scope.launch { runCatching { servicoFirestore.guardarMedicamento(perfil.id, med) } }
+                scope.launch { runCatching { clienteFirestore.guardarMedicamento(perfil.id, med) } }
             }
         }
     }
@@ -381,30 +389,30 @@ class RepositorioApp(context: Context) {
     fun adicionarMedicamento(perfil: Perfil, medicamento: Medicamento) {
         atualizarMedicamentos(perfil, medicamentos(perfil) + medicamento)
         scope.launch(Dispatchers.IO) {
-            dbRoom.medicamentoDao().inserirOuAtualizar(medicamento.paraEntidade(perfil.id, !estaOnline))
+            dbLocal.medicamentoDao().inserirOuAtualizar(medicamento.paraEntidade(perfil.id, !estaOnline))
         }
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.guardarMedicamento(perfil.id, medicamento) } }
+            scope.launch { runCatching { clienteFirestore.guardarMedicamento(perfil.id, medicamento) } }
         }
     }
 
     fun atualizarMedicamento(perfil: Perfil, medicamento: Medicamento) {
         atualizarMedicamentos(perfil, medicamentos(perfil).map { if (it.id == medicamento.id) medicamento else it })
         scope.launch(Dispatchers.IO) {
-            dbRoom.medicamentoDao().inserirOuAtualizar(medicamento.paraEntidade(perfil.id, !estaOnline))
+            dbLocal.medicamentoDao().inserirOuAtualizar(medicamento.paraEntidade(perfil.id, !estaOnline))
         }
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.guardarMedicamento(perfil.id, medicamento) } }
+            scope.launch { runCatching { clienteFirestore.guardarMedicamento(perfil.id, medicamento) } }
         }
     }
 
     fun apagarMedicamento(perfil: Perfil, id: Long) {
         atualizarMedicamentos(perfil, medicamentos(perfil).filterNot { it.id == id })
         scope.launch(Dispatchers.IO) {
-            dbRoom.medicamentoDao().apagarPorId(id)
+            dbLocal.medicamentoDao().apagarPorId(id)
         }
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.apagarMedicamento(perfil.id, id) } }
+            scope.launch { runCatching { clienteFirestore.apagarMedicamento(perfil.id, id) } }
         }
     }
 
@@ -418,10 +426,10 @@ class RepositorioApp(context: Context) {
         val atualizadas = consultas(perfil) + consulta
         atualizarConsultas(perfil, atualizadas)
         scope.launch(Dispatchers.IO) {
-            dbRoom.consultaDao().inserirOuAtualizar(consulta.paraEntidade(perfil.id, pendente = !estaOnline))
+            dbLocal.consultaDao().inserirOuAtualizar(consulta.paraEntidade(perfil.id, pendente = !estaOnline))
         }
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.guardarConsulta(perfil.id, consulta) } }
+            scope.launch { runCatching { clienteFirestore.guardarConsulta(perfil.id, consulta) } }
         }
     }
 
@@ -440,17 +448,17 @@ class RepositorioApp(context: Context) {
             val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
             if (idConsulta != null) {
                 scope.launch(Dispatchers.IO) {
-                    val consEnt = dbRoom.consultaDao().obterPorPerfil(perfilAtivo.id).find { it.id == idConsulta }
+                    val consEnt = dbLocal.consultaDao().obterPorPerfil(perfilAtivo.id).find { it.id == idConsulta }
                     if (consEnt != null) {
                         consEnt.checklistMarcadosJson = marcados.toList().serializarListaString()
                         consEnt.pendenteSincronizacao = !estaOnline
-                        dbRoom.consultaDao().inserirOuAtualizar(consEnt)
+                        dbLocal.consultaDao().inserirOuAtualizar(consEnt)
                     }
                 }
                 if (estaOnline) {
                     scope.launch {
                         runCatching {
-                            servicoFirestore.atualizarChecklistConsulta(perfilAtivo.id, idConsulta, marcados.toList())
+                            clienteFirestore.atualizarChecklistConsulta(perfilAtivo.id, idConsulta, marcados.toList())
                         }
                     }
                 }
@@ -472,17 +480,17 @@ class RepositorioApp(context: Context) {
             val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
             if (idConsulta != null) {
                 scope.launch(Dispatchers.IO) {
-                    val consEnt = dbRoom.consultaDao().obterPorPerfil(perfilAtivo.id).find { it.id == idConsulta }
+                    val consEnt = dbLocal.consultaDao().obterPorPerfil(perfilAtivo.id).find { it.id == idConsulta }
                     if (consEnt != null) {
                         consEnt.checklistCustomJson = itens.serializarListaString()
                         consEnt.pendenteSincronizacao = !estaOnline
-                        dbRoom.consultaDao().inserirOuAtualizar(consEnt)
+                        dbLocal.consultaDao().inserirOuAtualizar(consEnt)
                     }
                 }
                 if (estaOnline) {
                     scope.launch {
                         runCatching {
-                            servicoFirestore.atualizarChecklistCustomConsulta(perfilAtivo.id, idConsulta, itens)
+                            clienteFirestore.atualizarChecklistCustomConsulta(perfilAtivo.id, idConsulta, itens)
                         }
                     }
                 }
@@ -504,7 +512,7 @@ class RepositorioApp(context: Context) {
         escreverTextos("products_${perfil.id}", atualizados)
         salvarPerfilNoRoom(perfil)
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.atualizarProdutos(perfil.id, atualizados) } }
+            scope.launch { runCatching { clienteFirestore.atualizarProdutos(perfil.id, atualizados) } }
         }
     }
 
@@ -514,7 +522,7 @@ class RepositorioApp(context: Context) {
         escreverTextos("products_${perfil.id}", atualizados)
         salvarPerfilNoRoom(perfil)
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.atualizarProdutos(perfil.id, atualizados) } }
+            scope.launch { runCatching { clienteFirestore.atualizarProdutos(perfil.id, atualizados) } }
         }
     }
 
@@ -524,10 +532,10 @@ class RepositorioApp(context: Context) {
         val atualizadas = listOf(nota) + notas(perfil)
         guardarNotas(perfil, atualizadas)
         scope.launch(Dispatchers.IO) {
-            dbRoom.notaDao().inserir(NotaEntity(0, perfil.id, nota.texto, nota.autor, !estaOnline))
+            dbLocal.notaDao().inserir(NotaEntity(0, perfil.id, nota.texto, nota.autor, !estaOnline))
         }
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.atualizarNotas(perfil.id, atualizadas) } }
+            scope.launch { runCatching { clienteFirestore.atualizarNotas(perfil.id, atualizadas) } }
         }
     }
 
@@ -537,11 +545,11 @@ class RepositorioApp(context: Context) {
             atuais.removeAt(indice)
             guardarNotas(perfil, atuais)
             scope.launch(Dispatchers.IO) {
-                dbRoom.notaDao().apagarPorPerfil(perfil.id)
-                atuais.forEach { dbRoom.notaDao().inserir(NotaEntity(0, perfil.id, it.texto, it.autor, !estaOnline)) }
+                dbLocal.notaDao().apagarPorPerfil(perfil.id)
+                atuais.forEach { dbLocal.notaDao().inserir(NotaEntity(0, perfil.id, it.texto, it.autor, !estaOnline)) }
             }
             if (estaOnline) {
-                scope.launch { runCatching { servicoFirestore.atualizarNotas(perfil.id, atuais) } }
+                scope.launch { runCatching { clienteFirestore.atualizarNotas(perfil.id, atuais) } }
             }
         }
     }
@@ -602,7 +610,7 @@ class RepositorioApp(context: Context) {
 
         salvarPerfilNoRoom(novoPerfil)
         if (estaOnline) {
-            scope.launch { runCatching { servicoFirestore.salvarPerfilCompleto(novoPerfil) } }
+            scope.launch { runCatching { clienteFirestore.salvarPerfilCompleto(novoPerfil) } }
         }
 
         associarPerfilCuidado(novoPerfil.id)
@@ -642,7 +650,7 @@ class RepositorioApp(context: Context) {
 
         if (estaOnline) {
             scope.launch {
-                servicoFirestore.associarPerfilCuidado(utenteSessaoId, idCuidado)
+                clienteFirestore.associarPerfilCuidado(utenteSessaoId, idCuidado)
             }
         }
     }
@@ -673,7 +681,7 @@ class RepositorioApp(context: Context) {
 
         if (estaOnline) {
             scope.launch {
-                servicoFirestore.desassociarPerfilCuidado(utenteSessaoId, idCuidado)
+                clienteFirestore.desassociarPerfilCuidado(utenteSessaoId, idCuidado)
             }
         }
     }
@@ -688,9 +696,9 @@ class RepositorioApp(context: Context) {
 
     private fun carregarTudoDoRoomESincronizar() {
         scope.launch(Dispatchers.IO) {
-            val modulosDb = dbRoom.moduloDao().obterTodos().map { it.paraModelo() }
-            val videosDb = dbRoom.videoDao().obterTodos().map { it.paraModelo() }
-            val recompsDb = dbRoom.recompensaDao().obterTodas().map { it.paraModelo() }
+            val modulosDb = dbLocal.moduloDao().obterTodos().map { it.paraModelo() }
+            val videosDb = dbLocal.videoDao().obterTodos().map { it.paraModelo() }
+            val recompsDb = dbLocal.recompensaDao().obterTodas().map { it.paraModelo() }
             if (modulosDb.isNotEmpty() || videosDb.isNotEmpty() || recompsDb.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
                     if (modulosDb.isNotEmpty()) {
@@ -708,7 +716,7 @@ class RepositorioApp(context: Context) {
                 }
             }
 
-            val perfisDb = dbRoom.perfilDao().obterTodos()
+            val perfisDb = dbLocal.perfilDao().obterTodos()
             if (perfisDb.isNotEmpty()) {
                 val medsMap = mutableMapOf<String, List<Medicamento>>()
                 val consMap = mutableMapOf<String, List<Consulta>>()
@@ -717,13 +725,13 @@ class RepositorioApp(context: Context) {
                 val modelosCarregados = mutableListOf<Perfil>()
 
                 for (ent in perfisDb) {
-                    val meds = dbRoom.medicamentoDao().obterPorPerfil(ent.id).map { it.paraModelo() }
+                    val meds = dbLocal.medicamentoDao().obterPorPerfil(ent.id).map { it.paraModelo() }
                     medsMap[ent.id] = meds
 
-                    val cons = dbRoom.consultaDao().obterPorPerfil(ent.id).map { it.paraModelo() }
+                    val cons = dbLocal.consultaDao().obterPorPerfil(ent.id).map { it.paraModelo() }
                     consMap[ent.id] = cons
 
-                    val notasDb = dbRoom.notaDao().obterPorPerfil(ent.id).map { it.paraModelo() }
+                    val notasDb = dbLocal.notaDao().obterPorPerfil(ent.id).map { it.paraModelo() }
                     notasMap[ent.id] = notasDb
 
                     val prods = ent.outrosProdutosJson.deserializarListaString()
@@ -754,7 +762,7 @@ class RepositorioApp(context: Context) {
         val primeiraVezConcluida = preferencias.getBoolean("primeira_vez_concluida", false)
 
         scope.launch(Dispatchers.IO) {
-            val totalNoRoom = dbRoom.perfilDao().contar()
+            val totalNoRoom = dbLocal.perfilDao().contar()
 
             if (!online) {
                 if (!primeiraVezConcluida && totalNoRoom == 0) {
@@ -778,13 +786,13 @@ class RepositorioApp(context: Context) {
 
             // Sincronizar Módulos, Vídeos e Recompensas diretamente do Cloud Firestore
             runCatching {
-                val modulosRemotos = servicoFirestore.obterModulosSaude()
-                val videosRemotos = servicoFirestore.obterVideosBiblioteca()
-                val recompsRemotas = servicoFirestore.obterCatalogoRecompensas()
+                val modulosRemotos = clienteFirestore.obterModulosSaude()
+                val videosRemotos = clienteFirestore.obterVideosBiblioteca()
+                val recompsRemotas = clienteFirestore.obterCatalogoRecompensas()
 
-                dbRoom.moduloDao().inserirVarios(modulosRemotos.map { it.paraEntidade() })
-                dbRoom.videoDao().inserirVarios(videosRemotos.map { it.paraEntidade() })
-                dbRoom.recompensaDao().inserirVarias(recompsRemotas.map { it.paraEntidade() })
+                dbLocal.moduloDao().inserirVarios(modulosRemotos.map { it.paraEntidade() })
+                dbLocal.videoDao().inserirVarios(videosRemotos.map { it.paraEntidade() })
+                dbLocal.recompensaDao().inserirVarias(recompsRemotas.map { it.paraEntidade() })
 
                 withContext(Dispatchers.Main) {
                     modulosSaude.clear()
@@ -796,19 +804,19 @@ class RepositorioApp(context: Context) {
                 }
             }
 
-            val resultado = servicoFirestore.carregarTodosOsPerfis()
+            val resultado = clienteFirestore.carregarTodosOsPerfis()
             if (resultado.isSuccess) {
                 val remotos = resultado.getOrNull().orEmpty()
                 val idsRemotos = remotos.map { it.perfil.id }.toSet()
 
                 // 1. ELIMINAR DO ROOM E DA MEMÓRIA OS PERFIS QUE JÁ NÃO EXISTEM NO FIRESTORE
-                val perfisNoRoom = dbRoom.perfilDao().obterTodos()
+                val perfisNoRoom = dbLocal.perfilDao().obterTodos()
                 for (pLocal in perfisNoRoom) {
                     if (pLocal.id !in idsRemotos) {
-                        dbRoom.perfilDao().apagar(pLocal.id)
-                        dbRoom.medicamentoDao().apagarPorPerfil(pLocal.id)
-                        dbRoom.consultaDao().apagarPorPerfil(pLocal.id)
-                        dbRoom.notaDao().apagarPorPerfil(pLocal.id)
+                        dbLocal.perfilDao().apagar(pLocal.id)
+                        dbLocal.medicamentoDao().apagarPorPerfil(pLocal.id)
+                        dbLocal.consultaDao().apagarPorPerfil(pLocal.id)
+                        dbLocal.notaDao().apagarPorPerfil(pLocal.id)
                         withContext(Dispatchers.Main) {
                             listaMedicamentos.remove(pLocal.id)
                             listaConsultas.remove(pLocal.id)
@@ -865,20 +873,20 @@ class RepositorioApp(context: Context) {
                             vouchers = remoto.vouchersResgatados,
                             pendente = false,
                         )
-                        dbRoom.perfilDao().inserirOuAtualizar(pEnt)
+                        dbLocal.perfilDao().inserirOuAtualizar(pEnt)
 
                         val medsEnt = p.medicamentos.map { it.paraEntidade(p.id, false) }
-                        dbRoom.medicamentoDao().inserirVarios(medsEnt)
+                        dbLocal.medicamentoDao().inserirVarios(medsEnt)
 
                         val consEnt = p.consultas.map { c ->
                             val pair = remoto.checklistsConsultas[c.id]
                             c.paraEntidade(p.id, pair?.first.orEmpty(), pair?.second.orEmpty(), false)
                         }
-                        dbRoom.consultaDao().inserirVarios(consEnt)
+                        dbLocal.consultaDao().inserirVarios(consEnt)
 
-                        dbRoom.notaDao().apagarPorPerfil(p.id)
+                        dbLocal.notaDao().apagarPorPerfil(p.id)
                         p.notas.forEach { n ->
-                            dbRoom.notaDao().inserir(NotaEntity(0, p.id, n.texto, n.autor, false))
+                            dbLocal.notaDao().inserir(NotaEntity(0, p.id, n.texto, n.autor, false))
                         }
                     }
 
@@ -891,20 +899,20 @@ class RepositorioApp(context: Context) {
                 }
 
                 // Sincronizar itens pendentes offline para o Firestore
-                val medsPendentes = dbRoom.medicamentoDao().obterPendentes()
+                val medsPendentes = dbLocal.medicamentoDao().obterPendentes()
                 for (m in medsPendentes) {
-                    servicoFirestore.guardarMedicamento(m.idPerfil, m.paraModelo())
+                    clienteFirestore.guardarMedicamento(m.idPerfil, m.paraModelo())
                     m.pendenteSincronizacao = false
-                    dbRoom.medicamentoDao().inserirOuAtualizar(m)
+                    dbLocal.medicamentoDao().inserirOuAtualizar(m)
                 }
 
-                val consPendentes = dbRoom.consultaDao().obterPendentes()
+                val consPendentes = dbLocal.consultaDao().obterPendentes()
                 for (c in consPendentes) {
-                    servicoFirestore.guardarConsulta(c.idPerfil, c.paraModelo())
-                    servicoFirestore.atualizarChecklistConsulta(c.idPerfil, c.id, c.checklistMarcadosJson.deserializarListaString())
-                    servicoFirestore.atualizarChecklistCustomConsulta(c.idPerfil, c.id, c.checklistCustomJson.deserializarListaString())
+                    clienteFirestore.guardarConsulta(c.idPerfil, c.paraModelo())
+                    clienteFirestore.atualizarChecklistConsulta(c.idPerfil, c.id, c.checklistMarcadosJson.deserializarListaString())
+                    clienteFirestore.atualizarChecklistCustomConsulta(c.idPerfil, c.id, c.checklistCustomJson.deserializarListaString())
                     c.pendenteSincronizacao = false
-                    dbRoom.consultaDao().inserirOuAtualizar(c)
+                    dbLocal.consultaDao().inserirOuAtualizar(c)
                 }
 
                 withContext(Dispatchers.Main) {
@@ -941,7 +949,7 @@ class RepositorioApp(context: Context) {
      * Quando um perfil é apagado ou criado no Firebase Console, reflete imediatamente na app na hora.
      */
     fun iniciarEscutaTempoRealFirestore() {
-        servicoFirestore.iniciarEscutaPerfisEmTempoReal {
+        clienteFirestore.iniciarEscutaPerfisEmTempoReal {
             scope.launch(Dispatchers.IO) {
                 sincronizarAutomatico(online = true)
             }
@@ -1026,7 +1034,7 @@ class RepositorioApp(context: Context) {
         )
 
         // 1. Gravar no Firestore com subcoleções completas
-        servicoFirestore.salvarPerfilCompleto(
+        clienteFirestore.salvarPerfilCompleto(
             perfil = novo,
             pontos = 50,
             modulosConcluidos = emptyList(),
@@ -1037,13 +1045,13 @@ class RepositorioApp(context: Context) {
 
         // 2. Gravar no Room
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), false)
-        dbRoom.perfilDao().inserirOuAtualizar(pEnt)
+        dbLocal.perfilDao().inserirOuAtualizar(pEnt)
         val medsEnt = medicamentosExemplo.map { it.paraEntidade(novo.id, false) }
-        dbRoom.medicamentoDao().inserirVarios(medsEnt)
+        dbLocal.medicamentoDao().inserirVarios(medsEnt)
         val consEnt = consultasExemplo.map { it.paraEntidade(novo.id, emptyList(), emptyList(), false) }
-        dbRoom.consultaDao().inserirVarios(consEnt)
+        dbLocal.consultaDao().inserirVarios(consEnt)
         notasExemplo.forEach { n ->
-            dbRoom.notaDao().inserir(NotaEntity(0, novo.id, n.texto, n.autor, false))
+            dbLocal.notaDao().inserir(NotaEntity(0, novo.id, n.texto, n.autor, false))
         }
 
         withContext(Dispatchers.Main) {
@@ -1074,10 +1082,10 @@ class RepositorioApp(context: Context) {
                 vouchers = vouchers,
                 pendente = pendente,
             )
-            dbRoom.perfilDao().inserirOuAtualizar(entidade)
+            dbLocal.perfilDao().inserirOuAtualizar(entidade)
 
             val meds = medicamentos(perfil).map { it.paraEntidade(perfil.id, pendente) }
-            dbRoom.medicamentoDao().inserirVarios(meds)
+            dbLocal.medicamentoDao().inserirVarios(meds)
 
             val cons = consultas(perfil).map { c ->
                 val chave = "consulta_${c.id}"
@@ -1085,11 +1093,11 @@ class RepositorioApp(context: Context) {
                 val custom = obterItensCustomChecklist(chave)
                 c.paraEntidade(perfil.id, marcados, custom, pendente)
             }
-            dbRoom.consultaDao().inserirVarios(cons)
+            dbLocal.consultaDao().inserirVarios(cons)
 
-            dbRoom.notaDao().apagarPorPerfil(perfil.id)
+            dbLocal.notaDao().apagarPorPerfil(perfil.id)
             notas(perfil).forEach { n ->
-                dbRoom.notaDao().inserir(NotaEntity(0, perfil.id, n.texto, n.autor, pendente))
+                dbLocal.notaDao().inserir(NotaEntity(0, perfil.id, n.texto, n.autor, pendente))
             }
         }
     }
@@ -1334,3 +1342,8 @@ fun calcularNivelSeguranca(pontos: Int): InfoNivelSeguranca {
         else -> InfoNivelSeguranca(4, "Embaixador de Literacia em Saúde ULSBE", 500, 500, 1.0f)
     }
 }
+
+/**
+ * Typealias de conveniência que reforça o papel do repositório como centro clínico da app.
+ */
+typealias RepositorioClinico = RepositorioApp

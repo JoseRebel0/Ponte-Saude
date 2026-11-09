@@ -1,9 +1,12 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.entity;
 
 import androidx.annotation.NonNull;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
+/**
+ * Entidade Room que representa o perfil do utente e do cuidador.
+ */
 @Entity(tableName = "perfis")
 public class PerfilEntity {
     @PrimaryKey

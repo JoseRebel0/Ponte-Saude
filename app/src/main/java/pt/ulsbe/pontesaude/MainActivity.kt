@@ -14,7 +14,14 @@ import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.ui.NavegacaoApp
 import pt.ulsbe.pontesaude.ui.ServicosDispositivo
 
-class  MainActivity : ComponentActivity() {
+/**
+ * Atividade principal da aplicação Ponte Saúde.
+ *
+ * Responsável por:
+ * - Solicitar permissões necessárias do sistema (calendário e notificações).
+ * - Inicializar o repositório central e os serviços de dispositivo.
+ */
+class MainActivity : ComponentActivity() {
     private val pedirPermissoesApp = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->

@@ -1,8 +1,11 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.entity;
 
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
+/**
+ * Entidade Room que representa a tabela de consultas e exames médicos.
+ */
 @Entity(tableName = "consultas")
 public class ConsultaEntity {
     @PrimaryKey

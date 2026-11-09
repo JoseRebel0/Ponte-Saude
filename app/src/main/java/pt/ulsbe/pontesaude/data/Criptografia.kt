@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data.seguranca
+package pt.ulsbe.pontesaude.data
 
 import android.util.Base64
 import java.nio.charset.StandardCharsets
@@ -10,19 +10,16 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Módulo de Proteção e Criptografia em Conformidade com o RGPD
- * (Regulamento Geral sobre a Proteção de Dados - Regulamento UE 2016/679).
+ * Módulo de Criptografia e Proteção de Dados Pessoais (RGPD).
  *
- * Garante que dados pessoais e clínicos de categoria especial (Artigo 9.º do RGPD)
- * como NIF, Cartão de Cidadão, Número de Utente SNS, tipo sanguíneo, alergias,
- * medicação em curso, consultas e notas nunca fiquem expostos em texto simples
- * no Google Firebase Firestore.
+ * Aplica cifra AES-256-GCM aos dados pessoais de identificação do utente
+ * (NIF, Cartão de Cidadão, Número SNS, contactos e data de nascimento)
+ * antes da sincronização com a cloud.
  *
- * Utiliza o algoritmo padrão da indústria AES-256 no modo GCM (Galois/Counter Mode)
- * com vetor de inicialização (IV) aleatório de 96 bits e tag de autenticação de 128 bits,
- * garantindo confidencialidade e integridade à prova de adulteração na nuvem.
+ * Os dados clínicos essenciais (sangue, alergias, consultas, medicação e notas)
+ * mantêm-se acessíveis para o acompanhamento clínico.
  */
-object CriptografiaRgpd {
+object Criptografia {
 
     private const val PREFIXO_CIFRADO = "ENC:"
     private const val TAMANHO_IV_BYTES = 12 // 96 bits padrão para AES-GCM
@@ -105,7 +102,6 @@ object CriptografiaRgpd {
             val bytesDecifrados = cipher.doFinal(bytesCifrados)
             String(bytesDecifrados, StandardCharsets.UTF_8)
         } catch (_: Exception) {
-            // Se falhar o AES-GCM (ex.: fallback simples em Base64), tenta decode simples
             try {
                 String(Base64.decode(payloadBase64, Base64.NO_WRAP), StandardCharsets.UTF_8)
             } catch (_: Exception) {
@@ -115,7 +111,7 @@ object CriptografiaRgpd {
     }
 
     /**
-     * Cifra uma lista de itens sensíveis (ex: outros produtos naturais, checklists personalizadas).
+     * Cifra uma lista de itens sensíveis.
      */
     fun cifrarLista(lista: List<String>?): List<String> {
         if (lista == null) return emptyList()
@@ -130,3 +126,8 @@ object CriptografiaRgpd {
         return lista.map { decifrar(it) }
     }
 }
+
+/**
+ * Typealias de retrocompatibilidade para referências legadas a CriptografiaRgpd.
+ */
+typealias CriptografiaRgpd = Criptografia

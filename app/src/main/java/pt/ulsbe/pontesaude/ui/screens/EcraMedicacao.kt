@@ -832,7 +832,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                     ) {
                         Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Baixar Guia em PDF (Tratamento Completo)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Baixar Guia em PDF", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
 

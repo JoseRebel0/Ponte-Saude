@@ -1,8 +1,11 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.entity;
 
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
+/**
+ * Entidade Room que representa a tabela de medicamentos e plano posológico.
+ */
 @Entity(tableName = "medicamentos")
 public class MedicamentoEntity {
     @PrimaryKey

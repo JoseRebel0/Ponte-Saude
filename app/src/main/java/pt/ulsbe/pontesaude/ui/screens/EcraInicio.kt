@@ -71,8 +71,7 @@ private data class Atalho(val rotulo: String, val icone: ImageVector, val acao: 
 
 /**
  * Ecrã Principal da aplicação com o Cartão de Emergência, atalhos rápidos e próxima consulta.
- * Inclui o Número Nacional de Saúde (SNS) no cartão, a aba com o registo da última atualização
- * e suporte a Pull-to-Refresh suave.
+ * Inclui o Número Nacional de Saúde (SNS) no cartão, a aba com o registo da última atualização.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

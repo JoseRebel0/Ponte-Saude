@@ -1,7 +1,14 @@
-package pt.ulsbe.pontesaude.data.room
+package pt.ulsbe.pontesaude.data.local
 
 import org.json.JSONArray
 import org.json.JSONObject
+import pt.ulsbe.pontesaude.data.local.entity.ConsultaEntity
+import pt.ulsbe.pontesaude.data.local.entity.MedicamentoEntity
+import pt.ulsbe.pontesaude.data.local.entity.ModuloEntity
+import pt.ulsbe.pontesaude.data.local.entity.NotaEntity
+import pt.ulsbe.pontesaude.data.local.entity.PerfilEntity
+import pt.ulsbe.pontesaude.data.local.entity.RecompensaEntity
+import pt.ulsbe.pontesaude.data.local.entity.VideoEntity
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -11,6 +18,10 @@ import pt.ulsbe.pontesaude.model.RecompensaSeguranca
 import pt.ulsbe.pontesaude.model.TipoModulo
 import pt.ulsbe.pontesaude.model.VideoBibliotecaSaude
 import pt.ulsbe.pontesaude.model.VoucherResgatado
+
+/**
+ * Conversores e extensões de mapeamento entre Modelos de Domínio e Entidades Room SQLite.
+ */
 
 fun PerfilEntity.paraModelo(
     consultas: List<Consulta>,

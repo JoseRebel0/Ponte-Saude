@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.dao;
 
 import androidx.room.Dao;
 import androidx.room.Insert;
@@ -7,6 +7,11 @@ import androidx.room.Query;
 
 import java.util.List;
 
+import pt.ulsbe.pontesaude.data.local.entity.ConsultaEntity;
+
+/**
+ * Interface DAO para consultas e exames médicos na base de dados SQLite local.
+ */
 @Dao
 public interface ConsultaDao {
     @Query("SELECT * FROM consultas WHERE idPerfil = :idPerfil")

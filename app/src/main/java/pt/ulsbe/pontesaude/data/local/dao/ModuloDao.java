@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.dao;
 
 import androidx.room.Dao;
 import androidx.room.Insert;
@@ -7,6 +7,11 @@ import androidx.room.Query;
 
 import java.util.List;
 
+import pt.ulsbe.pontesaude.data.local.entity.ModuloEntity;
+
+/**
+ * Interface DAO para módulos de literacia e segurança clínica.
+ */
 @Dao
 public interface ModuloDao {
     @Query("SELECT * FROM modulos_saude")

@@ -1,8 +1,11 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.entity;
 
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
+/**
+ * Entidade Room que representa apontamentos e notas clínicas do utente ou cuidador.
+ */
 @Entity(tableName = "notas")
 public class NotaEntity {
     @PrimaryKey(autoGenerate = true)

@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data.room;
+package pt.ulsbe.pontesaude.data.local.dao;
 
 import androidx.room.Dao;
 import androidx.room.Insert;
@@ -7,6 +7,11 @@ import androidx.room.Query;
 
 import java.util.List;
 
+import pt.ulsbe.pontesaude.data.local.entity.PerfilEntity;
+
+/**
+ * Interface DAO para gestão de perfis clínicos (utente e cuidadores).
+ */
 @Dao
 public interface PerfilDao {
     @Query("SELECT * FROM perfis")

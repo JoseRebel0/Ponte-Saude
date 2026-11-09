@@ -1,9 +1,15 @@
 package pt.ulsbe.pontesaude.model
 
+/**
+ * Categorias interativas dos módulos de literacia e segurança do utente.
+ */
 enum class TipoModulo {
     INFO, LAVAGEM_MAOS, CIRURGIA, QUESTIONARIO, QUEDAS, CRIANCAS, CONTACTOS, PERGUNTAS, MEDICAMENTOS, LEITURA, RESUMO,
 }
 
+/**
+ * Módulo de literacia em saúde e segurança do doente.
+ */
 data class ModuloSaude(
     val id: String,
     val titulo: String,
@@ -14,6 +20,9 @@ data class ModuloSaude(
     val fala: String,
 )
 
+/**
+ * Medicamento com plano posológico e horários de toma diária.
+ */
 data class Medicamento(
     val id: Long,
     val nome: String,
@@ -37,6 +46,9 @@ data class Medicamento(
         }
 }
 
+/**
+ * Consulta ou exame agendado na ULSBE.
+ */
 data class Consulta(
     val id: Int,
     val dia: String,
@@ -47,8 +59,14 @@ data class Consulta(
     val jejum: Boolean = false,
 )
 
+/**
+ * Nota clínica ou dúvida registada para a consulta.
+ */
 data class Nota(val texto: String, val autor: String)
 
+/**
+ * Perfil do utente com dados clínicos e de identificação.
+ */
 data class Perfil(
     val id: String,
     val nome: String,
@@ -74,6 +92,9 @@ data class Perfil(
         get() = calcularIdade(dataNascimento)
 }
 
+/**
+ * Calcula a idade com base na data de nascimento (formato dd/MM/yyyy).
+ */
 fun calcularIdade(dataNascimento: String): String {
     val partes = dataNascimento.split("/")
     val ano = partes.lastOrNull()?.toIntOrNull() ?: return ""
@@ -81,10 +102,16 @@ fun calcularIdade(dataNascimento: String): String {
     return if (idade > 0) "$idade anos" else ""
 }
 
+/**
+ * Separadores da barra de navegação principal da aplicação.
+ */
 enum class SeparadorApp {
     INICIO, SAUDE, CONSULTAS, MEDICACAO, NOTAS, DEFINICOES
 }
 
+/**
+ * Recompensa resgatável através dos pontos acumulados de literacia.
+ */
 data class RecompensaSeguranca(
     val id: String,
     val titulo: String,
@@ -94,6 +121,9 @@ data class RecompensaSeguranca(
     val localLevantamento: String,
 )
 
+/**
+ * Registo de voucher resgatado pelo utente.
+ */
 data class VoucherResgatado(
     val id: String,
     val idRecompensa: String,
@@ -104,6 +134,9 @@ data class VoucherResgatado(
     val pontosUsados: Int,
 )
 
+/**
+ * Categorias dos itens de verificação da checklist de consulta.
+ */
 enum class CategoriaChecklist(val rotulo: String, val corFundo: Long, val corTexto: Long) {
     JEJUM("Jejum", 0xFFFFF7ED, 0xFFC2410C),
     DOCUMENTOS("Documentos", 0xFFEFF6FF, 0xFF1D4ED8),
@@ -112,6 +145,9 @@ enum class CategoriaChecklist(val rotulo: String, val corFundo: Long, val corTex
     GERAL("Recomendação", 0xFFF1F5F9, 0xFF475569),
 }
 
+/**
+ * Item individual da checklist de preparação de consulta ou procedimento.
+ */
 data class ItemChecklist(
     val id: String,
     val texto: String,
@@ -121,6 +157,9 @@ data class ItemChecklist(
     val personalizado: Boolean = false,
 )
 
+/**
+ * Vídeo educativo da biblioteca de literacia em saúde.
+ */
 data class VideoBibliotecaSaude(
     val id: String,
     val titulo: String,
