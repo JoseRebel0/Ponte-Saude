@@ -94,7 +94,6 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.R
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.theme.Atenuado

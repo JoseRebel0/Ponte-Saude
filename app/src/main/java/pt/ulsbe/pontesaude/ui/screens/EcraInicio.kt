@@ -48,12 +48,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.data.formatarMomentoAtualizacao
 import pt.ulsbe.pontesaude.model.Perfil
@@ -113,7 +113,7 @@ fun EcraInicio(
         Atalho("Linha SNS 24", Icons.Rounded.HeadsetMic) { plataforma.marcarNumero("808242424") },
         Atalho("Receitas", Icons.AutoMirrored.Rounded.ReceiptLong) { navegarPara(SeparadorApp.MEDICACAO) },
         Atalho("Consultas/Exames", Icons.Rounded.CalendarMonth) { navegarPara(SeparadorApp.CONSULTAS) },
-        Atalho("Auxílio ao Utente", Icons.Rounded.Favorite) { navegarPara(SeparadorApp.SAUDE) },
+        Atalho("Segurança do Utente", Icons.Rounded.Favorite) { navegarPara(SeparadorApp.SAUDE) },
         Atalho("Apontamentos", Icons.Rounded.Description) { navegarPara(SeparadorApp.NOTAS) },
         Atalho("Definições", Icons.Rounded.Settings) { navegarPara(SeparadorApp.DEFINICOES) },
     )
@@ -218,7 +218,13 @@ fun EcraInicio(
                                         Icon(atalho.icone, null, tint = MarcaClaro, modifier = Modifier.size(32.dp))
                                     }
                                     Spacer(Modifier.height(7.dp))
-                                    Text(atalho.rotulo, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        text = atalho.rotulo,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
                                 }
                             }
                         }

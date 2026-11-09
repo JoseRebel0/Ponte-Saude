@@ -11,9 +11,12 @@ import androidx.room.RoomDatabase;
         PerfilEntity.class,
         MedicamentoEntity.class,
         ConsultaEntity.class,
-        NotaEntity.class
+        NotaEntity.class,
+        ModuloEntity.class,
+        VideoEntity.class,
+        RecompensaEntity.class
     },
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 public abstract class BaseDadosApp extends RoomDatabase {
@@ -22,6 +25,9 @@ public abstract class BaseDadosApp extends RoomDatabase {
     public abstract MedicamentoDao medicamentoDao();
     public abstract ConsultaDao consultaDao();
     public abstract NotaDao notaDao();
+    public abstract ModuloDao moduloDao();
+    public abstract VideoDao videoDao();
+    public abstract RecompensaDao recompensaDao();
 
     private static volatile BaseDadosApp INSTANCIA;
 

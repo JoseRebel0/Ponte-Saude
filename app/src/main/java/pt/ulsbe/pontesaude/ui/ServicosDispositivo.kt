@@ -6,23 +6,37 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.AlarmClock
 import android.provider.CalendarContract
+import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import pt.ulsbe.pontesaude.MainActivity
 import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
+import pt.ulsbe.pontesaude.model.Perfil
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -649,6 +663,245 @@ class ServicosDispositivo(context: Context?) {
                 cm.activeNetworkInfo?.isConnectedOrConnecting == true
             }
         }.getOrDefault(false)
+    }
+
+    /**
+     * Gera e guarda o documento PDF oficial com a lista completa de medicação do utente.
+     * Guarda nas Transferências / Downloads do telemóvel e disponibiliza o Uri do FileProvider para abertura imediata.
+     */
+    fun gerarEGuardarPdfMedicacao(
+        perfil: Perfil,
+        medicamentos: List<Medicamento>,
+        outrosProdutos: List<String> = emptyList(),
+    ): Pair<Uri?, String> {
+        val ctx = contextoApp ?: return Pair(null, "Contexto indisponível")
+        return runCatching {
+            val documento = PdfDocument()
+            val largura = 595 // Largura padrão A4 (pontos)
+            val altura = 842  // Altura padrão A4 (pontos)
+            val infoPagina = PdfDocument.PageInfo.Builder(largura, altura, 1).create()
+            val pagina = documento.startPage(infoPagina)
+            val canvas = pagina.canvas
+
+            val paint = Paint().apply { isAntiAlias = true }
+
+            // 1. Cabeçalho ULSBE (Barra Azul)
+            paint.color = AndroidColor.parseColor("#1D5BD8")
+            canvas.drawRect(0f, 0f, largura.toFloat(), 80f, paint)
+
+            paint.color = AndroidColor.WHITE
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 15f
+            canvas.drawText("ULSBE · Unidade Local de Saúde de Barcelos / Esposende", 28f, 32f, paint)
+
+            paint.textSize = 12f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("GUIA OFICIAL DE MEDICAÇÃO E TRATAMENTO", 28f, 52f, paint)
+
+            paint.textSize = 9f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            canvas.drawText("SNS · Serviço Nacional de Saúde | Registo Pessoal do Utente", 28f, 68f, paint)
+
+            // 2. Caixa de Identificação do Utente
+            var yAtual = 100f
+            paint.color = AndroidColor.parseColor("#F1F5F9")
+            canvas.drawRoundRect(24f, yAtual, largura - 24f, yAtual + 72f, 10f, 10f, paint)
+
+            paint.color = AndroidColor.parseColor("#0F172A")
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 11f
+            canvas.drawText("Utente: ${perfil.nome}", 36f, yAtual + 20f, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 10f
+            paint.color = AndroidColor.parseColor("#334155")
+            canvas.drawText("Nº Nacional de Saúde (SNS): ${perfil.numeroUtente}    |    Tipo Sanguíneo: ${perfil.tipoSanguineo}", 36f, yAtual + 38f, paint)
+            canvas.drawText("Alergias registadas: ${perfil.alergias}", 36f, yAtual + 54f, paint)
+
+            val formatoData = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+            val dataStr = formatoData.format(Date())
+            paint.textSize = 9f
+            paint.color = AndroidColor.parseColor("#64748B")
+            canvas.drawText("Emitido em: $dataStr", largura - 180f, yAtual + 20f, paint)
+
+            // 3. Título da Secção de Medicação
+            yAtual += 92f
+            paint.color = AndroidColor.parseColor("#1D5BD8")
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 12f
+            canvas.drawText("PRESCRIÇÃO & PLANO DE TOMAS DIÁRIAS (${medicamentos.size} medicamentos)", 26f, yAtual, paint)
+
+            // Cabeçalho da Tabela
+            yAtual += 14f
+            paint.color = AndroidColor.parseColor("#E2E8F0")
+            canvas.drawRect(24f, yAtual, largura - 24f, yAtual + 22f, paint)
+
+            paint.color = AndroidColor.parseColor("#1E293B")
+            paint.textSize = 9f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("MEDICAMENTO", 30f, yAtual + 15f, paint)
+            canvas.drawText("PRINCÍPIO ATIVO", 200f, yAtual + 15f, paint)
+            canvas.drawText("FINALIDADE", 320f, yAtual + 15f, paint)
+            canvas.drawText("HORÁRIOS", 440f, yAtual + 15f, paint)
+            canvas.drawText("ESTADO", 520f, yAtual + 15f, paint)
+
+            yAtual += 22f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 9f
+
+            if (medicamentos.isEmpty()) {
+                paint.color = AndroidColor.parseColor("#64748B")
+                canvas.drawText("Nenhum medicamento prescrito de momento.", 30f, yAtual + 20f, paint)
+                yAtual += 30f
+            } else {
+                medicamentos.forEachIndexed { idx, med ->
+                    if (yAtual > altura - 120f) return@forEachIndexed // Limite da página
+
+                    if (idx % 2 == 1) {
+                        paint.color = AndroidColor.parseColor("#F8FAFC")
+                        canvas.drawRect(24f, yAtual, largura - 24f, yAtual + 26f, paint)
+                    }
+
+                    // Nome do medicamento
+                    paint.color = AndroidColor.parseColor("#0F172A")
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    val nomeTrunc = if (med.nome.length > 25) med.nome.take(24) + "…" else med.nome
+                    canvas.drawText(nomeTrunc, 30f, yAtual + 17f, paint)
+
+                    // Princípio Ativo
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = AndroidColor.parseColor("#475569")
+                    val princTrunc = if (med.principioAtivo.length > 20) med.principioAtivo.take(19) + "…" else med.principioAtivo.ifBlank { "-" }
+                    canvas.drawText(princTrunc, 200f, yAtual + 17f, paint)
+
+                    // Finalidade
+                    val finTrunc = if (med.finalidade.length > 20) med.finalidade.take(19) + "…" else med.finalidade.ifBlank { "-" }
+                    canvas.drawText(finTrunc, 320f, yAtual + 17f, paint)
+
+                    // Horários
+                    val horaText = med.hora.ifBlank { "08:00" }
+                    canvas.drawText(horaText, 440f, yAtual + 17f, paint)
+
+                    // Estado
+                    if (med.ativo) {
+                        paint.color = AndroidColor.parseColor("#059669")
+                        canvas.drawText("Ativo", 520f, yAtual + 17f, paint)
+                    } else {
+                        paint.color = AndroidColor.parseColor("#DC2626")
+                        canvas.drawText("Pausado", 520f, yAtual + 17f, paint)
+                    }
+
+                    yAtual += 26f
+                }
+            }
+
+            // 4. Secção de Produtos Naturais e Suplementos
+            if (outrosProdutos.isNotEmpty() && yAtual < altura - 140f) {
+                yAtual += 16f
+                paint.color = AndroidColor.parseColor("#1D5BD8")
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10f
+                canvas.drawText("SUPLEMENTOS E OUTROS PRODUTOS EM TOMA", 26f, yAtual, paint)
+
+                yAtual += 6f
+                paint.color = AndroidColor.parseColor("#334155")
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 9f
+                outrosProdutos.forEach { prod ->
+                    yAtual += 14f
+                    canvas.drawText("• $prod", 32f, yAtual, paint)
+                }
+            }
+
+            // 5. Rodapé Clínico e Contactos
+            paint.color = AndroidColor.parseColor("#EFF6FF")
+            canvas.drawRoundRect(24f, altura - 75f, largura - 24f, altura - 20f, 8f, 8f, paint)
+
+            paint.color = AndroidColor.parseColor("#1E40AF")
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.5f
+            canvas.drawText("Aviso Clínico de Segurança do Doente:", 34f, altura - 58f, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 8f
+            canvas.drawText("• Leve sempre esta lista atualizada a todas as consultas, exames, urgências e internamentos hospitalares.", 34f, altura - 44f, paint)
+            canvas.drawText("• Linha SNS 24: 808 24 24 24 (Apoio e triagem 24 horas)  |  Emergência Médica Nacional: 112", 34f, altura - 30f, paint)
+
+            documento.finishPage(pagina)
+
+            // Gravação do Ficheiro PDF
+            val nomeSanitizado = perfil.nomeCurto.replace("\\s+".toRegex(), "_")
+            val nomeFicheiro = "Guia_Medicacao_${nomeSanitizado}.pdf"
+
+            // 1) Guardar na cache para partilha / abertura imediata
+            val ficheiroLocal = File(ctx.cacheDir, nomeFicheiro)
+            FileOutputStream(ficheiroLocal).use { fos ->
+                documento.writeTo(fos)
+            }
+
+            // 2) Guardar na pasta de Downloads / Transferências do telemóvel
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val valores = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, nomeFicheiro)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uriDownloads = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, valores)
+                if (uriDownloads != null) {
+                    ctx.contentResolver.openOutputStream(uriDownloads)?.use { os ->
+                        documento.writeTo(os)
+                    }
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val dirDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (dirDownloads.exists() || dirDownloads.mkdirs()) {
+                    val ficheiroPublico = File(dirDownloads, nomeFicheiro)
+                    FileOutputStream(ficheiroPublico).use { fos ->
+                        documento.writeTo(fos)
+                    }
+                }
+            }
+
+            documento.close()
+
+            val uriFileProvider = FileProvider.getUriForFile(ctx, "${ctx.packageName}.provider", ficheiroLocal)
+            Pair(uriFileProvider, nomeFicheiro)
+        }.getOrElse { e ->
+            Pair(null, "Erro ao gerar PDF: ${e.message}")
+        }
+    }
+
+    /**
+     * Abre diretamente o PDF no visualizador predefinido do Android (Google Drive, Adobe, etc.).
+     */
+    fun abrirPdf(uri: Uri) {
+        val ctx = contextoApp ?: return
+        runCatching {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(Intent.createChooser(intent, "Abrir Guia de Medicação").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /**
+     * Partilha o PDF gerado através de WhatsApp, Email ou qualquer outra aplicação instalada.
+     */
+    fun partilharPdf(uri: Uri, titulo: String = "Guia de Medicação") {
+        val ctx = contextoApp ?: return
+        runCatching {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, titulo)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(Intent.createChooser(intent, "Partilhar Guia de Medicação").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 
     fun fechar() {

@@ -3,6 +3,7 @@ package pt.ulsbe.pontesaude.ui.screens
 import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Alarm
@@ -55,6 +57,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -82,7 +85,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
@@ -137,6 +139,9 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
     var fotoAmpliada by remember { mutableStateOf<Bitmap?>(null) }
     var filtroHorario by remember { mutableStateOf("Todos") } // "Todos", "Ativos", "Manhã", "Tarde", "Noite"
     var rascunhoProduto by remember { mutableStateOf("") }
+    var pdfGeradoUri by remember { mutableStateOf<Uri?>(null) }
+    var pdfNomeFicheiro by remember { mutableStateOf("") }
+    var mostrarDialogoPdf by remember { mutableStateOf(false) }
 
     val duplicados = medicamentos
         .filter { medicamento ->
@@ -807,6 +812,28 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                             Icon(Icons.Rounded.Share, "Partilhar lista com médico ou farmácia")
                         }
                     }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val (uri, nome) = plataforma.gerarEGuardarPdfMedicacao(perfil, medicamentos, repositorio.produtos(perfil))
+                            if (uri != null) {
+                                pdfGeradoUri = uri
+                                pdfNomeFicheiro = nome
+                                mostrarDialogoPdf = true
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MarcaMedio),
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ReceiptLong, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Baixar Guia em PDF (Tratamento Completo)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
 
                 // 6. OUTROS PRODUTOS & SUPLEMENTOS NATURAIS (LAYOUT LIMPO SEM ESPAÇOS MORTOS)
@@ -1131,6 +1158,47 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             confirmButton = {
                 TextButton(onClick = { fotoAmpliada = null }) {
                     Text("Fechar")
+                }
+            },
+        )
+    }
+
+    // DIÁLOGO CONFIRMAÇÃO DE DOWNLOAD DO GUIA EM PDF
+    if (mostrarDialogoPdf && pdfGeradoUri != null) {
+        AlertDialog(
+            onDismissRequest = { mostrarDialogoPdf = false },
+            icon = { Icon(Icons.AutoMirrored.Rounded.ReceiptLong, null, tint = MarcaMedio) },
+            title = { Text("Guia em PDF Descarregado", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("O documento foi gerado e guardado com sucesso na pasta de Transferências / Downloads do seu telemóvel:")
+                    Text(pdfNomeFicheiro, fontWeight = FontWeight.Bold, color = MarcaMedio)
+                    Text(
+                        "Pode agora abrir o PDF no seu telemóvel para consulta ou partilhar com o seu médico assistente ou farmácia.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    pdfGeradoUri?.let { plataforma.abrirPdf(it) }
+                    mostrarDialogoPdf = false
+                }) {
+                    Text("Abrir PDF")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = {
+                        pdfGeradoUri?.let { plataforma.partilharPdf(it, "Guia de Medicação · ${perfil.nome}") }
+                        mostrarDialogoPdf = false
+                    }) {
+                        Text("Partilhar")
+                    }
+                    TextButton(onClick = { mostrarDialogoPdf = false }) {
+                        Text("Fechar")
+                    }
                 }
             },
         )
@@ -1476,7 +1544,16 @@ private fun String.descodificarBitmap(): Bitmap? = runCatching {
 @Preview(name = "Ecrã Medicação", showBackground = true)
 @Composable
 fun PreVisualizacaoEcraMedicacao() {
-    val perfil = DadosIniciais.perfis.first()
+    val perfil = Perfil(
+        id = "1",
+        nome = "Utente Demonstração",
+        nomeCurto = "Utente",
+        relacao = "Utente",
+        iniciais = "UD",
+        numeroUtente = "189 423 761",
+        tipoSanguineo = "A+",
+        alergias = "Sem alergias",
+    )
     val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
         EcraMedicacao(perfil = perfil, repositorio = remember { RepositorioApp(contexto) }, plataforma = ServicosDispositivo(null))

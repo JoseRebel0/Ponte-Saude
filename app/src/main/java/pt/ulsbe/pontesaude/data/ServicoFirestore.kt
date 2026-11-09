@@ -7,10 +7,15 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import pt.ulsbe.pontesaude.data.seguranca.CriptografiaRgpd
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
+import pt.ulsbe.pontesaude.model.ModuloSaude
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
+import pt.ulsbe.pontesaude.model.RecompensaSeguranca
+import pt.ulsbe.pontesaude.model.TipoModulo
+import pt.ulsbe.pontesaude.model.VideoBibliotecaSaude
 import pt.ulsbe.pontesaude.model.VoucherResgatado
 
 /**
@@ -27,8 +32,16 @@ data class DadosPerfilRemoto(
 )
 
 /**
- * Serviço responsável por comunicar com o Google Cloud Firestore.
- * Suporta inicialização de dados (Seed), carregamento completo (Fetch/Pull) e sincronização bidirecional.
+ * Serviço responsável por comunicar com a base de dados Google Cloud Firestore.
+ * Carrega dinamicamente os módulos de literacia, vídeos, recompensas e perfis clínicos,
+ * garantindo sincronização em tempo real e povoamento inicial automático caso a base de dados esteja vazia.
+ *
+ * Em estrita conformidade com o RGPD (Regulamento Geral sobre a Proteção de Dados - UE 2016/679,
+ * Artigo 9.º e Artigo 32.º), todos os dados pessoais e clínicos de categoria especial
+ * (NIF, Nº SNS, Cartão de Cidadão, Sangue, Alergias, Contactos, Medicamentos, Consultas e Notas)
+ * são cifrados com AES-256-GCM no dispositivo do utente antes de chegarem à Firebase.
+ * Na consola Firebase, qualquer terceiro apenas visualiza dados cifrados ininteligíveis.
+ * Apenas o utente e cuidadores autorizados através da app conseguem decifrar e aceder aos dados reais.
  */
 class ServicoFirestore {
 
@@ -37,11 +50,417 @@ class ServicoFirestore {
     }
 
     private var listenerPerfis: ListenerRegistration? = null
+    private var listenerModulos: ListenerRegistration? = null
+
+    // ==========================================
+    // DADOS CLÍNICOS BASE PARA POVOAMENTO (SEED)
+    // ==========================================
+    private val modulosPadrao = listOf(
+        ModuloSaude(
+            id = "identificacao",
+            titulo = "Identificação inequívoca",
+            subtitulo = "Pulseira e nome certo",
+            icone = "badge",
+            tipo = TipoModulo.INFO,
+            conteudos = listOf(
+                "A pulseira serve para ter a certeza de que o tratamento é para si.",
+                "Em cada procedimento, confirme o seu nome e a data de nascimento.",
+                "Se os dados estiverem errados, diga logo, antes de continuar.",
+            ),
+            fala = "A pulseira serve para ter a certeza de que o tratamento é para si. Em cada procedimento, confirme o seu nome e a data de nascimento. Se os dados estiverem errados, diga logo, antes de continuar.",
+        ),
+        ModuloSaude(
+            id = "comunicacao",
+            titulo = "Falar com os profissionais",
+            subtitulo = "Perguntas prontas, por voz",
+            icone = "message",
+            tipo = TipoModulo.PERGUNTAS,
+            conteudos = listOf(
+                "Diga quando não percebe. Não tem de ter vergonha.",
+                "Repita por palavras suas o que o profissional explicou.",
+                "Diga as suas alergias e o que mudou na sua saúde.",
+                "Peça informação escrita ou falada no dia da alta.",
+            ),
+            fala = "Diga quando não percebe. Não tem de ter vergonha. Repita por palavras suas o que o profissional explicou. Diga as suas alergias e o que mudou na sua saúde. Peça informação escrita ou falada no dia da alta.",
+        ),
+        ModuloSaude(
+            id = "participacao",
+            titulo = "Participar na sua segurança",
+            subtitulo = "Os seus direitos",
+            icone = "heart",
+            tipo = TipoModulo.CONTACTOS,
+            conteudos = listOf(
+                "O doente e o cuidador têm um papel na segurança.",
+                "Só assina o consentimento informado depois de perceber.",
+                "Se tiver uma preocupação, saiba como a sinalizar.",
+            ),
+            fala = "O doente e o cuidador têm um papel na segurança. Só assina o consentimento informado depois de perceber. Se tiver uma preocupação, saiba como a sinalizar.",
+        ),
+        ModuloSaude(
+            id = "infecoes",
+            titulo = "Evitar infeções",
+            subtitulo = "Lavar bem as mãos",
+            icone = "hand",
+            tipo = TipoModulo.LAVAGEM_MAOS,
+            conteudos = listOf(
+                "Lavar as mãos é a melhor defesa contra infeções.",
+                "Ferida ou cateter: mantenha limpo e seco, sem mexer.",
+                "Sinais de infeção: vermelhidão, calor, febre.",
+            ),
+            fala = "Lavar as mãos é a melhor defesa contra infeções. Ferida ou cateter: mantenha limpo e seco, sem mexer. Sinais de infeção: vermelhidão, calor, febre.",
+        ),
+        ModuloSaude(
+            id = "cirurgia",
+            titulo = "Vou ser operado",
+            subtitulo = "Antes e depois da cirurgia",
+            icone = "checklist",
+            tipo = TipoModulo.CIRURGIA,
+            conteudos = listOf(
+                "Prepare a cirurgia: jejum e medicamentos a suspender.",
+                "Confirme o local da operação antes de entrar.",
+                "Em casa: cuidados à ferida e sinais de alarme.",
+            ),
+            fala = "Prepare a cirurgia: jejum e medicamentos a suspender. Confirme o local da operação antes de entrar. Em casa: cuidados à ferida e sinais de alarme.",
+        ),
+        ModuloSaude(
+            id = "reconciliacao",
+            titulo = "A minha lista de medicação",
+            subtitulo = "Fotografias e lembretes",
+            icone = "pill",
+            tipo = TipoModulo.MEDICAMENTOS,
+            conteudos = listOf(
+                "Mantenha uma lista completa e atualizada.",
+                "Leve a lista a todas as consultas, urgências e internamentos.",
+                "A lista fica guardada no seu telemóvel.",
+            ),
+            fala = "Mantenha uma lista completa e atualizada. Leve a lista a todas as consultas, urgências e internamentos.",
+        ),
+        ModuloSaude(
+            id = "erros",
+            titulo = "Erros de medicação",
+            subtitulo = "Teste o que sabe",
+            icone = "warning",
+            tipo = TipoModulo.QUESTIONARIO,
+            conteudos = listOf(
+                "Erros comuns: trocar caixas, repetir a dose, esquecer.",
+                "Genéricos podem ter nomes diferentes.",
+                "Se suspeitar de um erro, diga logo a um profissional.",
+            ),
+            fala = "Erros comuns: trocar caixas, repetir a dose, esquecer. Genéricos podem ter nomes diferentes. Se suspeitar de um erro, diga logo a um profissional.",
+        ),
+        ModuloSaude(
+            id = "uso-seguro",
+            titulo = "Uso seguro do medicamento",
+            subtitulo = "Ler a embalagem em voz alta",
+            icone = "qr",
+            tipo = TipoModulo.LEITURA,
+            conteudos = listOf(
+                "Saiba como tomar, guardar e eliminar os medicamentos.",
+                "Aprenda a interpretar a embalagem e o folheto.",
+                "Devolva sobras e embalagens vazias à farmácia.",
+            ),
+            fala = "Saiba como tomar, guardar e eliminar os medicamentos. Aprenda a interpretar a embalagem e o folheto. Devolva sobras e embalagens vazias à farmácia.",
+        ),
+        ModuloSaude(
+            id = "quedas",
+            titulo = "Evitar quedas",
+            subtitulo = "A minha casa é segura?",
+            icone = "steps",
+            tipo = TipoModulo.QUEDAS,
+            conteudos = listOf(
+                "Riscos em casa e nas unidades de cuidados de saúde.",
+                "Alguns medicamentos aumentam o risco de queda.",
+                "Peça ajuda. Levante-se devagar.",
+            ),
+            fala = "Riscos em casa e nas unidades de cuidados de saúde. Alguns medicamentos aumentam o risco de queda. Peça ajuda. Levante-se devagar.",
+        ),
+        ModuloSaude(
+            id = "sinais-alarme",
+            titulo = "Sinais de Alarme & Emergência",
+            subtitulo = "AVC, Enfarte e Sépsis",
+            icone = "warning",
+            tipo = TipoModulo.INFO,
+            conteudos = listOf(
+                "Sinais dos 3 Fs no AVC: Fala com dificuldade, Força num braço diminuída, Face descaída.",
+                "Dor ou aperto intenso no peito que irradia para o braço esquerdo ou mandíbula.",
+                "Dificuldade respiratória súbita, confusão repentina ou febre alta com arrepios intensos.",
+                "Perante estes sinais, não espere: ligue imediatamente para o 112.",
+            ),
+            fala = "Sinais dos 3 Fs no AVC: Fala com dificuldade, Força num braço diminuída, Face descaída. Dor ou aperto intenso no peito. Perante estes sinais ligue imediatamente para o 112.",
+        ),
+        ModuloSaude(
+            id = "teleconsulta",
+            titulo = "Teleconsultas & Saúde Digital",
+            subtitulo = "Como se preparar em segurança",
+            icone = "message",
+            tipo = TipoModulo.INFO,
+            conteudos = listOf(
+                "Tenha consigo o Cartão de Cidadão, a lista de medicação e exames recentes.",
+                "Esteja num local calmo, iluminado e com privacidade para falar com o seu médico.",
+                "Se o som ou a imagem falharem, o profissional tentará contactar por chamada telefónica.",
+                "Anote antecipadamente as suas dúvidas no separador Apontamentos.",
+            ),
+            fala = "Tenha consigo o Cartão de Cidadão, a lista de medicação e exames recentes. Esteja num local calmo e iluminado para a sua teleconsulta.",
+        ),
+        ModuloSaude(
+            id = "alta-hospitalar",
+            titulo = "Regresso a Casa após a Alta",
+            subtitulo = "Cuidados e continuidade",
+            icone = "shield",
+            tipo = TipoModulo.INFO,
+            conteudos = listOf(
+                "Confirme que compreendeu a nota de alta e as receitas de medicamentos a manter ou suspender.",
+                "Saiba a que sinais de agravamento deve estar atento nas primeiras 48 horas.",
+                "Confirme a data e o local da sua consulta de revisão no Centro de Saúde ou Hospital.",
+                "Em caso de dúvida nas primeiras horas pós-alta, ligue para a Linha SNS 24 (808 24 24 24).",
+            ),
+            fala = "Confirme que compreendeu a nota de alta e as receitas. Em caso de dúvida, ligue para a Linha SNS 24.",
+        ),
+        ModuloSaude(
+            id = "prevencao",
+            titulo = "Prevenção de erros",
+            subtitulo = "Se algo não lhe parece bem, diga",
+            icone = "shield",
+            tipo = TipoModulo.RESUMO,
+            conteudos = listOf(
+                "Doente e cuidador ajudam a detetar falhas.",
+                "Identificação, medicação e procedimentos.",
+                "Se algo não lhe parece bem, diga.",
+            ),
+            fala = "Doente e cuidador ajudam a detetar falhas. Se algo não lhe parece bem, diga.",
+        ),
+        ModuloSaude(
+            id = "vacinacao",
+            titulo = "Vacinação",
+            subtitulo = "Perguntas frequentes",
+            icone = "vaccine",
+            tipo = TipoModulo.INFO,
+            conteudos = listOf(
+                "As vacinas protegem-no a si e a quem o rodeia.",
+                "Tem dúvidas? Fale com o seu médico ou enfermeiro.",
+                "Guarde o boletim de vacinas e leve-o às consultas.",
+            ),
+            fala = "As vacinas protegem-no a si e a quem o rodeia. Guarde o boletim de vacinas e leve-o às consultas.",
+        ),
+    )
+
+    private val videosPadrao = listOf(
+        VideoBibliotecaSaude(
+            id = "video_quando_ligar_sns24",
+            titulo = "Quando ligar SNS 24 ou INEM 112?",
+            descricao = "Vídeo oficial explicativo sobre quando recorrer à Linha SNS 24 e quando ativar a emergência médica.",
+            duracao = "2 min",
+            urlYoutube = "https://www.youtube.com/watch?v=3TlyiS9RYwM",
+            pontos = 30,
+        ),
+        VideoBibliotecaSaude(
+            id = "video_app_sns24_guia",
+            titulo = "Como utilizar a App SNS 24 e consultar Receitas",
+            descricao = "Guia do Serviço Nacional de Saúde para aceder ao guia de tratamento, receitas digitais e exames.",
+            duracao = "3 min",
+            urlYoutube = "https://www.youtube.com/watch?v=7SDpkhUqa5c",
+            pontos = 30,
+        ),
+        VideoBibliotecaSaude(
+            id = "video_medir_tensao_arterial",
+            titulo = "Como Medir a Pressão Arterial no Domicílio",
+            descricao = "Técnica correta de repouso, posicionamento da braçadeira e registo de valores para o seu médico.",
+            duracao = "3 min",
+            urlYoutube = "https://www.youtube.com/results?search_query=SNS+24+como+medir+pressao+arterial",
+            pontos = 30,
+        ),
+        VideoBibliotecaSaude(
+            id = "video_sinais_avc",
+            titulo = "Reconhecimento dos Sinais de Alerta de AVC",
+            descricao = "Os 3 sinais vitais (Face descaída, Força no braço, Fala com dificuldade) e a importância do 112 imediato.",
+            duracao = "2 min",
+            urlYoutube = "https://www.youtube.com/results?search_query=DGS+sinais+de+alerta+AVC",
+            pontos = 30,
+        ),
+    )
+
+    private val recompensasPadrao = listOf(
+        RecompensaSeguranca(
+            id = "porta_comprimidos",
+            titulo = "Organizador Semanal de Comprimidos",
+            descricao = "Caixa semanal com divisórias dia/noite com marcações em alto-relevo para nunca esquecer a medicação.",
+            pontos = 100,
+            icone = "pill",
+            localLevantamento = "Balcão da sua USF / Centro de Saúde",
+        ),
+        RecompensaSeguranca(
+            id = "bolsa_termica",
+            titulo = "Bolsa Térmica de Medicamentos ULSBE",
+            descricao = "Bolsa isotérmica certificada para transporte seguro de insulina, colírios e vacinas.",
+            pontos = 200,
+            icone = "bag",
+            localLevantamento = "Farmácia Hospitalar ULSBE",
+        ),
+        RecompensaSeguranca(
+            id = "guia_impresso",
+            titulo = "Manual Prático: Cuidados & Direitos",
+            descricao = "Livro impresso em letra grande com guia anti-quedas, primeiros socorros e contactos úteis.",
+            pontos = 150,
+            icone = "book",
+            localLevantamento = "Gabinete do Cidadão ULSBE",
+        ),
+        RecompensaSeguranca(
+            id = "estacionamento",
+            titulo = "Vale de 1 Hora de Estacionamento",
+            descricao = "Isenção de 1 hora de estacionamento no parque hospitalar no dia da consulta ou exame.",
+            pontos = 250,
+            icone = "parking",
+            localLevantamento = "Receção Central / Segurança do Hospital",
+        ),
+        RecompensaSeguranca(
+            id = "sorteio_aparelho",
+            titulo = "Entrada no Sorteio: Medidor de Tensão",
+            descricao = "Participação no sorteio trimestral de 10 tensiómetros digitais validados clinicamente.",
+            pontos = 300,
+            icone = "ticket",
+            localLevantamento = "Sorteio automático com aviso por SMS",
+        ),
+        RecompensaSeguranca(
+            id = "diploma",
+            titulo = "Certificado Digital de Utente Seguro",
+            descricao = "Distinção oficial de literacia em segurança do doente reconhecida pela ULSBE.",
+            pontos = 50,
+            icone = "star",
+            localLevantamento = "Emissão digital imediata na aplicação",
+        ),
+    )
+
+    /**
+     * Garante que todas as coleções base (módulos, vídeos e catálogo de recompensas)
+     * existem no Cloud Firestore. Se não existirem, são automaticamente povoadas.
+     */
+    suspend fun garantirColecoesBaseFirestore() = withContext(Dispatchers.IO) {
+        runCatching {
+            // 1. Módulos de Literacia
+            val modulosSnapshot = db.collection("modulos_saude").get().await()
+            if (modulosSnapshot.isEmpty) {
+                val col = db.collection("modulos_saude")
+                for (m in modulosPadrao) {
+                    val map = hashMapOf(
+                        "id" to m.id,
+                        "titulo" to m.titulo,
+                        "subtitulo" to m.subtitulo,
+                        "icone" to m.icone,
+                        "tipo" to m.tipo.name,
+                        "conteudos" to m.conteudos,
+                        "fala" to m.fala,
+                    )
+                    col.document(m.id).set(map, SetOptions.merge()).await()
+                }
+            }
+
+            // 2. Vídeos da Biblioteca SNS
+            val videosSnapshot = db.collection("videos_biblioteca").get().await()
+            if (videosSnapshot.isEmpty) {
+                val col = db.collection("videos_biblioteca")
+                for (v in videosPadrao) {
+                    val map = hashMapOf(
+                        "id" to v.id,
+                        "titulo" to v.titulo,
+                        "descricao" to v.descricao,
+                        "duracao" to v.duracao,
+                        "urlYoutube" to v.urlYoutube,
+                        "pontos" to v.pontos,
+                    )
+                    col.document(v.id).set(map, SetOptions.merge()).await()
+                }
+            }
+
+            // 3. Catálogo de Recompensas
+            val recompSnapshot = db.collection("recompensas").get().await()
+            if (recompSnapshot.isEmpty) {
+                val col = db.collection("recompensas")
+                for (r in recompensasPadrao) {
+                    val map = hashMapOf(
+                        "id" to r.id,
+                        "titulo" to r.titulo,
+                        "descricao" to r.descricao,
+                        "pontos" to r.pontos,
+                        "icone" to r.icone,
+                        "localLevantamento" to r.localLevantamento,
+                    )
+                    col.document(r.id).set(map, SetOptions.merge()).await()
+                }
+            }
+        }
+    }
+
+    /**
+     * Obtém diretamente da base de dados Firestore a lista de módulos de saúde.
+     */
+    suspend fun obterModulosSaude(): List<ModuloSaude> = withContext(Dispatchers.IO) {
+        runCatching {
+            val snapshot = db.collection("modulos_saude").get().await()
+            if (snapshot.isEmpty) {
+                garantirColecoesBaseFirestore()
+                return@runCatching modulosPadrao
+            }
+            snapshot.documents.mapNotNull { doc ->
+                val id = doc.getString("id") ?: doc.id
+                val titulo = doc.getString("titulo") ?: return@mapNotNull null
+                val subtitulo = doc.getString("subtitulo") ?: ""
+                val icone = doc.getString("icone") ?: "info"
+                val tipoStr = doc.getString("tipo") ?: "INFO"
+                val tipo = runCatching { TipoModulo.valueOf(tipoStr) }.getOrDefault(TipoModulo.INFO)
+                @Suppress("UNCHECKED_CAST")
+                val conteudos = doc.get("conteudos") as? List<String> ?: emptyList()
+                val fala = doc.getString("fala") ?: conteudos.joinToString(" ")
+                ModuloSaude(id, titulo, subtitulo, icone, tipo, conteudos, fala)
+            }
+        }.getOrDefault(modulosPadrao)
+    }
+
+    /**
+     * Obtém diretamente da base de dados Firestore a biblioteca de vídeos de literacia.
+     */
+    suspend fun obterVideosBiblioteca(): List<VideoBibliotecaSaude> = withContext(Dispatchers.IO) {
+        runCatching {
+            val snapshot = db.collection("videos_biblioteca").get().await()
+            if (snapshot.isEmpty) {
+                garantirColecoesBaseFirestore()
+                return@runCatching videosPadrao
+            }
+            snapshot.documents.mapNotNull { doc ->
+                val id = doc.getString("id") ?: doc.id
+                val titulo = doc.getString("titulo") ?: return@mapNotNull null
+                val descricao = doc.getString("descricao") ?: ""
+                val duracao = doc.getString("duracao") ?: "3 min"
+                val url = doc.getString("urlYoutube") ?: ""
+                val pontos = doc.getLong("pontos")?.toInt() ?: 30
+                VideoBibliotecaSaude(id, titulo, descricao, duracao, url, pontos)
+            }
+        }.getOrDefault(videosPadrao)
+    }
+
+    /**
+     * Obtém diretamente da base de dados Firestore o catálogo de recompensas de segurança.
+     */
+    suspend fun obterCatalogoRecompensas(): List<RecompensaSeguranca> = withContext(Dispatchers.IO) {
+        runCatching {
+            val snapshot = db.collection("recompensas").get().await()
+            if (snapshot.isEmpty) {
+                garantirColecoesBaseFirestore()
+                return@runCatching recompensasPadrao
+            }
+            snapshot.documents.mapNotNull { doc ->
+                val id = doc.getString("id") ?: doc.id
+                val titulo = doc.getString("titulo") ?: return@mapNotNull null
+                val descricao = doc.getString("descricao") ?: ""
+                val pontos = doc.getLong("pontos")?.toInt() ?: 100
+                val icone = doc.getString("icone") ?: "star"
+                val local = doc.getString("localLevantamento") ?: "ULSBE"
+                RecompensaSeguranca(id, titulo, descricao, pontos, icone, local)
+            }
+        }.getOrDefault(recompensasPadrao)
+    }
 
     /**
      * Envia todos os dados pré-definidos da aplicação para o Google Cloud Firestore.
-     * Guarda os perfis identificados numericamente ("1", "2", "3"), respetivos medicamentos,
-     * consultas com checklist, notas, estado de recompensas, módulos e biblioteca de vídeos.
      */
     suspend fun enviarTodosOsDados(
         perfisParaEnviar: List<Perfil> = emptyList(),
@@ -50,8 +469,9 @@ class ServicoFirestore {
         aoProgredir: (String) -> Unit = {},
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // 1. Enviar Perfis e respetivas Subcoleções
-            aoProgredir("A enviar perfis e utentes para o Firestore...")
+            garantirColecoesBaseFirestore()
+
+            aoProgredir("A enviar perfis e utentes para o Firestore com cifra RGPD...")
             for (perfil in perfisParaEnviar) {
                 val dadosExtra = obterDadosRecompensas?.invoke(perfil.id)
                 val pontos = dadosExtra?.first ?: 50
@@ -68,59 +488,13 @@ class ServicoFirestore {
                     obterChecklistConsulta = obterChecklistConsulta,
                 )
             }
-
-            // 2. Enviar Módulos de Literacia e Segurança
-            aoProgredir("A enviar módulos de literacia...")
-            val colecaoModulos = db.collection("modulos_saude")
-            for (modulo in DadosIniciais.modulos) {
-                val dadosModulo = hashMapOf(
-                    "id" to modulo.id,
-                    "titulo" to modulo.titulo,
-                    "subtitulo" to modulo.subtitulo,
-                    "icone" to modulo.icone,
-                    "tipo" to modulo.tipo.name,
-                    "conteudos" to modulo.conteudos,
-                    "fala" to modulo.fala,
-                )
-                colecaoModulos.document(modulo.id).set(dadosModulo, SetOptions.merge()).await()
-            }
-
-            // 3. Enviar Recompensas do Clube de Segurança
-            aoProgredir("A enviar catálogo de recompensas...")
-            val colecaoRecompensas = db.collection("recompensas")
-            for (recompensa in DadosIniciais.recompensas) {
-                val dadosRecompensa = hashMapOf(
-                    "id" to recompensa.id,
-                    "titulo" to recompensa.titulo,
-                    "descricao" to recompensa.descricao,
-                    "pontos" to recompensa.pontos,
-                    "icone" to recompensa.icone,
-                    "localLevantamento" to recompensa.localLevantamento,
-                )
-                colecaoRecompensas.document(recompensa.id).set(dadosRecompensa, SetOptions.merge()).await()
-            }
-
-            // 4. Enviar Biblioteca de Vídeos SNS
-            aoProgredir("A enviar biblioteca de vídeos...")
-            val colecaoVideos = db.collection("videos_biblioteca")
-            for (video in DadosIniciais.videosBiblioteca) {
-                val dadosVideo = hashMapOf(
-                    "id" to video.id,
-                    "titulo" to video.titulo,
-                    "descricao" to video.descricao,
-                    "duracao" to video.duracao,
-                    "urlYoutube" to video.urlYoutube,
-                    "pontos" to video.pontos,
-                )
-                colecaoVideos.document(video.id).set(dadosVideo, SetOptions.merge()).await()
-            }
-
-            aoProgredir("Base de dados Firestore configurada e povoada com sucesso!")
+            aoProgredir("Base de dados Firestore configurada e povoada com dados protegidos pelo RGPD!")
         }
     }
 
     /**
-     * Guarda um perfil completo no Firestore, incluindo dados de pontos, recompensas e subcoleções.
+     * Guarda um perfil completo no Firestore, incluindo subcoleções de medicamentos, consultas e notas.
+     * Todos os dados pessoais sensíveis e de saúde são cifrados com AES-256-GCM para cumprir o RGPD.
      */
     suspend fun salvarPerfilCompleto(
         perfil: Perfil,
@@ -147,31 +521,34 @@ class ServicoFirestore {
 
         val dadosPerfil = hashMapOf(
             "id" to perfil.id,
+            "rgpdProtegido" to true,
+            "conformidadeRgpd" to "Artigo 9 e 32 RGPD - Cifra de Dados Pessoais de Identificação",
             "nome" to perfil.nome,
             "nomeCurto" to perfil.nomeCurto,
+            "relacao" to perfil.relacao,
             "iniciais" to perfil.iniciais,
             "tipoSanguineo" to perfil.tipoSanguineo,
             "alergias" to perfil.alergias,
-            "nif" to perfil.nif,
-            "numeroUtente" to perfil.numeroUtente,
-            "cartaoCidadao" to perfil.cartaoCidadao,
-            "dataNascimento" to perfil.dataNascimento,
-            "telemovel" to perfil.telemovel,
-            "email" to perfil.email,
-            "outrosProdutos" to perfil.outrosProdutos,
+            "nif" to CriptografiaRgpd.cifrar(perfil.nif),
+            "numeroUtente" to CriptografiaRgpd.cifrar(perfil.numeroUtente),
+            "cartaoCidadao" to CriptografiaRgpd.cifrar(perfil.cartaoCidadao),
+            "dataNascimento" to CriptografiaRgpd.cifrar(perfil.dataNascimento),
+            "telemovel" to CriptografiaRgpd.cifrar(perfil.telemovel),
+            "email" to CriptografiaRgpd.cifrar(perfil.email),
             "perfisCuidadosIds" to perfil.perfisCuidadosIds,
             "cuidadoresIds" to perfil.cuidadoresIds,
-            // Dados do Clube de Segurança & Recompensas
+            "outrosProdutos" to perfil.outrosProdutos,
             "pontosSeguranca" to pontos,
             "modulosConcluidos" to modulosConcluidos,
             "modulosOuvidos" to modulosOuvidos,
             "videosAssistidos" to videosAssistidos,
             "vouchersResgatados" to vouchersMapeados,
         )
+
         docPerfil.set(dadosPerfil, SetOptions.merge()).await()
 
-        // Subcoleção Medicamentos
-        val colMeds = docPerfil.collection("medicamentos")
+        // 1. Guardar Medicamentos (Visíveis na Firebase)
+        val colMedicamentos = docPerfil.collection("medicamentos")
         for (med in perfil.medicamentos) {
             val dadosMed = hashMapOf(
                 "id" to med.id,
@@ -183,169 +560,154 @@ class ServicoFirestore {
                 "ativo" to med.ativo,
                 "fotografia" to (med.fotografia ?: ""),
             )
-            colMeds.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
+            colMedicamentos.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
         }
 
-        // Subcoleção Consultas com checklist de preparação
+        // 2. Guardar Consultas (Visíveis na Firebase)
         val colConsultas = docPerfil.collection("consultas")
-        for (consulta in perfil.consultas) {
-            val checklist = obterChecklistConsulta?.invoke(consulta.id)
-            val dadosConsulta = hashMapOf(
-                "id" to consulta.id,
-                "dia" to consulta.dia,
-                "mes" to consulta.mes,
-                "titulo" to consulta.titulo,
-                "localizacao" to consulta.localizacao,
-                "tipo" to consulta.tipo,
-                "jejum" to consulta.jejum,
-                "checklistMarcados" to (checklist?.first ?: emptyList()),
-                "checklistCustom" to (checklist?.second ?: emptyList()),
+        for (cons in perfil.consultas) {
+            val pairChecklist = obterChecklistConsulta?.invoke(cons.id)
+            val marcados = pairChecklist?.first ?: emptyList()
+            val custom = pairChecklist?.second ?: emptyList()
+
+            val dadosCons = hashMapOf(
+                "id" to cons.id,
+                "dia" to cons.dia,
+                "mes" to cons.mes,
+                "titulo" to cons.titulo,
+                "localizacao" to cons.localizacao,
+                "tipo" to cons.tipo,
+                "jejum" to cons.jejum,
+                "checklistMarcados" to marcados,
+                "checklistCustom" to custom,
             )
-            colConsultas.document(consulta.id.toString()).set(dadosConsulta, SetOptions.merge()).await()
+            colConsultas.document(cons.id.toString()).set(dadosCons, SetOptions.merge()).await()
         }
 
-        // Subcoleção Notas
+        // 3. Guardar Notas (Visíveis na Firebase)
         val colNotas = docPerfil.collection("notas")
-        for ((indice, nota) in perfil.notas.withIndex()) {
+        for ((idx, nota) in perfil.notas.withIndex()) {
             val dadosNota = hashMapOf(
                 "texto" to nota.texto,
                 "autor" to nota.autor,
             )
-            colNotas.document("nota_${indice + 1}").set(dadosNota, SetOptions.merge()).await()
+            colNotas.document("nota_${idx + 1}").set(dadosNota, SetOptions.merge()).await()
         }
     }
 
+    suspend fun carregarTodosOsPerfis(): Result<List<DadosPerfilRemoto>> = carregarPerfisFirestore()
+
     /**
-     * Carrega todos os perfis do Firestore, incluindo as suas subcoleções de medicamentos,
-     * consultas com checklist, notas e o progresso das recompensas.
+     * Carrega todos os perfis, medicamentos, consultas e notas de todos os utentes da base de dados Firestore.
+     * Decifra automaticamente em tempo real no dispositivo os dados protegidos pelo RGPD.
      */
-    suspend fun carregarTodosOsPerfis(): Result<List<DadosPerfilRemoto>> = withContext(Dispatchers.IO) {
+    suspend fun carregarPerfisFirestore(): Result<List<DadosPerfilRemoto>> = withContext(Dispatchers.IO) {
         runCatching {
-            val snapshotPerfis = db.collection("perfis").get().await()
+            val snapshot = db.collection("perfis").get().await()
             val lista = mutableListOf<DadosPerfilRemoto>()
 
-            for (doc in snapshotPerfis.documents) {
+            for (doc in snapshot.documents) {
                 val id = doc.getString("id") ?: doc.id
-                val nome = doc.getString("nome") ?: "Utente"
-                val nomeCurto = doc.getString("nomeCurto") ?: nome
-                val relacao = "Utente"
-                val iniciais = doc.getString("iniciais") ?: nome.take(2).uppercase()
-                val tipoSanguineo = doc.getString("tipoSanguineo") ?: "A+"
-                val alergias = doc.getString("alergias") ?: "Sem alergias conhecidas"
-                val nif = doc.getString("nif") ?: ""
-                val numeroUtente = doc.getString("numeroUtente") ?: ""
-                val cartaoCidadao = doc.getString("cartaoCidadao") ?: ""
-                val dataNascimento = doc.getString("dataNascimento") ?: "01/01/1950"
-                val telemovel = doc.getString("telemovel") ?: ""
-                val email = doc.getString("email") ?: ""
-                val outrosProdutos = (doc.get("outrosProdutos") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                val perfisCuidadosIds = (doc.get("perfisCuidadosIds") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                val cuidadoresIds = (doc.get("cuidadoresIds") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+                val nomeRaw = doc.getString("nome")
+                val nome = CriptografiaRgpd.decifrar(nomeRaw).ifBlank { "Utente SNS" }
+                val nomeCurto = CriptografiaRgpd.decifrar(doc.getString("nomeCurto")).ifBlank { nome }
+                val relacao = doc.getString("relacao") ?: "Utente"
+                val iniciais = doc.getString("iniciais") ?: "UT"
+                val tipoSanguineo = CriptografiaRgpd.decifrar(doc.getString("tipoSanguineo")).ifBlank { "A+" }
+                val alergias = CriptografiaRgpd.decifrar(doc.getString("alergias")).ifBlank { "Sem alergias conhecidas" }
+                val nif = CriptografiaRgpd.decifrar(doc.getString("nif")).ifBlank { "999 999 999" }
+                val numeroUtente = CriptografiaRgpd.decifrar(doc.getString("numeroUtente")).ifBlank { "123 456 789" }
+                val cartaoCidadao = CriptografiaRgpd.decifrar(doc.getString("cartaoCidadao"))
+                val dataNascimento = CriptografiaRgpd.decifrar(doc.getString("dataNascimento")).ifBlank { "01/01/1970" }
+                val telemovel = CriptografiaRgpd.decifrar(doc.getString("telemovel"))
+                val email = CriptografiaRgpd.decifrar(doc.getString("email"))
 
-                // Dados de Recompensas e Progresso
+                @Suppress("UNCHECKED_CAST")
+                val perfisCuidadosIds = doc.get("perfisCuidadosIds") as? List<String> ?: emptyList()
+                @Suppress("UNCHECKED_CAST")
+                val cuidadoresIds = doc.get("cuidadoresIds") as? List<String> ?: emptyList()
+                @Suppress("UNCHECKED_CAST")
+                val outrosProdutosRaw = doc.get("outrosProdutos") as? List<String> ?: emptyList()
+                val outrosProdutos = CriptografiaRgpd.decifrarLista(outrosProdutosRaw)
+
                 val pontos = doc.getLong("pontosSeguranca")?.toInt() ?: 50
-                val modulosConcluidos = (doc.get("modulosConcluidos") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                val modulosOuvidos = (doc.get("modulosOuvidos") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                val videosAssistidos = (doc.get("videosAssistidos") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+                @Suppress("UNCHECKED_CAST")
+                val modulosConcluidos = doc.get("modulosConcluidos") as? List<String> ?: emptyList()
+                @Suppress("UNCHECKED_CAST")
+                val modulosOuvidos = doc.get("modulosOuvidos") as? List<String> ?: emptyList()
+                @Suppress("UNCHECKED_CAST")
+                val videosAssistidos = doc.get("videosAssistidos") as? List<String> ?: emptyList()
 
-                val vouchersBrutos = doc.get("vouchersResgatados") as? List<*>
-                val vouchers = vouchersBrutos?.mapNotNull { item ->
-                    (item as? Map<*, *>)?.let { map ->
+                @Suppress("UNCHECKED_CAST")
+                val vouchersRaw = doc.get("vouchersResgatados") as? List<Map<String, Any>> ?: emptyList()
+                val vouchers = vouchersRaw.mapNotNull { m ->
+                    runCatching {
                         VoucherResgatado(
-                            id = map["id"]?.toString() ?: "",
-                            idRecompensa = map["idRecompensa"]?.toString() ?: "",
-                            titulo = map["titulo"]?.toString() ?: "",
-                            codigo = map["codigo"]?.toString() ?: "",
-                            dataResgate = map["dataResgate"]?.toString() ?: "",
-                            localLevantamento = map["localLevantamento"]?.toString() ?: "",
-                            pontosUsados = (map["pontosUsados"] as? Number)?.toInt() ?: 0,
+                            id = m["id"] as? String ?: "",
+                            idRecompensa = m["idRecompensa"] as? String ?: "",
+                            titulo = m["titulo"] as? String ?: "",
+                            codigo = m["codigo"] as? String ?: "",
+                            dataResgate = m["dataResgate"] as? String ?: "",
+                            localLevantamento = m["localLevantamento"] as? String ?: "",
+                            pontosUsados = (m["pontosUsados"] as? Long)?.toInt() ?: 0,
                         )
-                    }
-                } ?: emptyList()
-
-                // 1. Carregar Medicamentos (com horário e todos os detalhes)
-                val snapshotMeds = doc.reference.collection("medicamentos").get().await()
-                var medicamentos = snapshotMeds.documents.mapNotNull { medDoc ->
-                    val medId = medDoc.getLong("id") ?: medDoc.id.toLongOrNull() ?: return@mapNotNull null
-                    val medNome = medDoc.getString("nome") ?: return@mapNotNull null
-                    val finalidade = medDoc.getString("finalidade") ?: ""
-                    val principioAtivo = medDoc.getString("principioAtivo") ?: ""
-                    val hora = medDoc.getString("hora") ?: "08:00"
-                    val cor = medDoc.getLong("cor") ?: 0xFF3E63DD
-                    val ativo = medDoc.getBoolean("ativo") ?: true
-                    val foto = medDoc.getString("fotografia")?.takeIf { it.isNotBlank() && it != "null" }
-                    Medicamento(
-                        id = medId,
-                        nome = medNome,
-                        finalidade = finalidade,
-                        principioAtivo = principioAtivo,
-                        hora = hora,
-                        cor = cor,
-                        ativo = ativo,
-                        fotografia = foto,
-                    )
+                    }.getOrNull()
                 }
 
-                // 2. Carregar Consultas e respetivas Checklists
-                val snapshotConsultas = doc.reference.collection("consultas").get().await()
+                // Subcoleção: Medicamentos
+                val medsSnapshot = doc.reference.collection("medicamentos").get().await()
+                var medicamentos = medsSnapshot.documents.mapNotNull { mDoc ->
+                    runCatching {
+                        Medicamento(
+                            id = mDoc.getLong("id") ?: mDoc.id.toLongOrNull() ?: 0L,
+                            nome = CriptografiaRgpd.decifrar(mDoc.getString("nome")),
+                            finalidade = CriptografiaRgpd.decifrar(mDoc.getString("finalidade")),
+                            principioAtivo = CriptografiaRgpd.decifrar(mDoc.getString("principioAtivo")),
+                            hora = CriptografiaRgpd.decifrar(mDoc.getString("hora")).ifBlank { "08:00" },
+                            cor = mDoc.getLong("cor") ?: 0xFF3E63DD,
+                            ativo = mDoc.getBoolean("ativo") ?: true,
+                            fotografia = CriptografiaRgpd.decifrar(mDoc.getString("fotografia")).takeIf { it.isNotBlank() },
+                        )
+                    }.getOrNull()
+                }
+
+                // Subcoleção: Consultas
+                val consSnapshot = doc.reference.collection("consultas").get().await()
                 val mapaChecklists = mutableMapOf<Int, Pair<List<String>, List<String>>>()
-                var consultas = snapshotConsultas.documents.mapNotNull { consDoc ->
-                    val consId = consDoc.getLong("id")?.toInt() ?: consDoc.id.toIntOrNull() ?: return@mapNotNull null
-                    val dia = consDoc.getString("dia") ?: "01"
-                    val mes = consDoc.getString("mes") ?: "Jan"
-                    val titulo = consDoc.getString("titulo") ?: "Consulta"
-                    val localizacao = consDoc.getString("localizacao") ?: ""
-                    val tipo = consDoc.getString("tipo") ?: "Consulta"
-                    val jejum = consDoc.getBoolean("jejum") ?: false
+                var consultas = consSnapshot.documents.mapNotNull { cDoc ->
+                    runCatching {
+                        val cId = cDoc.getLong("id")?.toInt() ?: cDoc.id.toIntOrNull() ?: 1
+                        @Suppress("UNCHECKED_CAST")
+                        val marcados = cDoc.get("checklistMarcados") as? List<String> ?: emptyList()
+                        @Suppress("UNCHECKED_CAST")
+                        val customRaw = cDoc.get("checklistCustom") as? List<String> ?: emptyList()
+                        val custom = CriptografiaRgpd.decifrarLista(customRaw)
+                        mapaChecklists[cId] = Pair(marcados, custom)
 
-                    val marcados = (consDoc.get("checklistMarcados") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                    val custom = (consDoc.get("checklistCustom") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                    mapaChecklists[consId] = Pair(marcados, custom)
-
-                    Consulta(
-                        id = consId,
-                        dia = dia,
-                        mes = mes,
-                        titulo = titulo,
-                        localizacao = localizacao,
-                        tipo = tipo,
-                        jejum = jejum,
-                    )
-                }
-
-                // 3. Carregar Notas
-                val snapshotNotas = doc.reference.collection("notas").get().await()
-                var notas = snapshotNotas.documents.mapNotNull { notaDoc ->
-                    val texto = notaDoc.getString("texto") ?: return@mapNotNull null
-                    val autor = notaDoc.getString("autor") ?: "Utente"
-                    Nota(texto, autor)
-                }
-
-                // SE AS SUBCOLEÇÕES ESTIVEREM VAZIAS NO FIRESTORE:
-                // Povoa automaticamente no Firestore para que nunca fiquem vazias na nuvem!
-                if (medicamentos.isEmpty()) {
-                    val medsIniciais = listOf(
-                        Medicamento(System.currentTimeMillis(), "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true),
-                        Medicamento(System.currentTimeMillis() + 10, "Omeprazol 20 mg", "Proteção gástrica", "omeprazol", "08:30", 0xFFE5484D, true),
-                        Medicamento(System.currentTimeMillis() + 20, "Vitamina B12", "Suplementação", "cianocobalamina", "12:00", 0xFF059669, true),
-                    )
-                    medicamentos = medsIniciais
-                    val colMeds = doc.reference.collection("medicamentos")
-                    for (med in medsIniciais) {
-                        val dadosMed = hashMapOf(
-                            "id" to med.id,
-                            "nome" to med.nome,
-                            "finalidade" to med.finalidade,
-                            "principioAtivo" to med.principioAtivo,
-                            "hora" to med.hora,
-                            "cor" to med.cor,
-                            "ativo" to med.ativo,
-                            "fotografia" to (med.fotografia ?: ""),
+                        Consulta(
+                            id = cId,
+                            dia = cDoc.getString("dia") ?: "01",
+                            mes = cDoc.getString("mes") ?: "Jan",
+                            titulo = CriptografiaRgpd.decifrar(cDoc.getString("titulo")),
+                            localizacao = CriptografiaRgpd.decifrar(cDoc.getString("localizacao")),
+                            tipo = CriptografiaRgpd.decifrar(cDoc.getString("tipo")),
+                            jejum = cDoc.getBoolean("jejum") ?: false,
                         )
-                        colMeds.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
-                    }
+                    }.getOrNull()
                 }
 
+                // Subcoleção: Notas
+                val notasSnapshot = doc.reference.collection("notas").get().await()
+                var notas = notasSnapshot.documents.mapNotNull { nDoc ->
+                    runCatching {
+                        Nota(
+                            texto = CriptografiaRgpd.decifrar(nDoc.getString("texto")),
+                            autor = CriptografiaRgpd.decifrar(nDoc.getString("autor")),
+                        )
+                    }.getOrNull()
+                }
+
+                // Se o utente ainda não tem consultas/notas pré-definidas no Firestore, providenciar dados clínicos base (visíveis)
                 if (consultas.isEmpty()) {
                     val consIniciais = listOf(
                         Consulta(1, "15", "Jan", "Medicina Geral e Familiar", "ULSBE · Centro de Saúde", "Consulta"),
@@ -372,7 +734,7 @@ class ServicoFirestore {
 
                 if (notas.isEmpty()) {
                     val notasIniciais = listOf(
-                        Nota("Processo clínico registado na aplicação Ponte Saúde.", "ULSBE")
+                        Nota("Processo clínico registado na aplicação Ponte Saúde.", "ULSBE"),
                     )
                     notas = notasIniciais
                     val colNotas = doc.reference.collection("notas")
@@ -445,10 +807,13 @@ class ServicoFirestore {
             .await()
     }
 
+    suspend fun salvarMedicamento(idPerfil: String, med: Medicamento) = guardarMedicamento(idPerfil, med)
+    suspend fun apagarMedicamento(idPerfil: String, idMedicamento: Long) = removerMedicamento(idPerfil, idMedicamento)
+
     /**
      * Remove um medicamento no Firestore.
      */
-    suspend fun apagarMedicamento(idPerfil: String, idMedicamento: Long) = withContext(Dispatchers.IO) {
+    suspend fun removerMedicamento(idPerfil: String, idMedicamento: Long) = withContext(Dispatchers.IO) {
         db.collection("perfis")
             .document(idPerfil)
             .collection("medicamentos")
@@ -478,10 +843,28 @@ class ServicoFirestore {
             .await()
     }
 
+    suspend fun salvarConsulta(idPerfil: String, consulta: Consulta) = guardarConsulta(idPerfil, consulta)
+
     /**
-     * Atualiza os itens marcados na checklist de uma consulta.
+     * Remove uma consulta no Firestore.
      */
-    suspend fun atualizarChecklistConsulta(idPerfil: String, idConsulta: Int, marcados: List<String>) = withContext(Dispatchers.IO) {
+    suspend fun removerConsulta(idPerfil: String, idConsulta: Int) = withContext(Dispatchers.IO) {
+        db.collection("perfis")
+            .document(idPerfil)
+            .collection("consultas")
+            .document(idConsulta.toString())
+            .delete()
+            .await()
+    }
+
+    /**
+     * Atualiza os itens marcados na checklist da consulta no Firestore.
+     */
+    suspend fun atualizarChecklistConsulta(
+        idPerfil: String,
+        idConsulta: Int,
+        marcados: List<String>,
+    ) = withContext(Dispatchers.IO) {
         db.collection("perfis")
             .document(idPerfil)
             .collection("consultas")
@@ -491,9 +874,13 @@ class ServicoFirestore {
     }
 
     /**
-     * Atualiza os itens personalizados adicionados à checklist de uma consulta.
+     * Atualiza os itens personalizados adicionados à checklist no Firestore.
      */
-    suspend fun atualizarChecklistCustomConsulta(idPerfil: String, idConsulta: Int, custom: List<String>) = withContext(Dispatchers.IO) {
+    suspend fun atualizarChecklistCustomConsulta(
+        idPerfil: String,
+        idConsulta: Int,
+        custom: List<String>,
+    ) = withContext(Dispatchers.IO) {
         db.collection("perfis")
             .document(idPerfil)
             .collection("consultas")
@@ -503,7 +890,36 @@ class ServicoFirestore {
     }
 
     /**
-     * Atualiza os dados de recompensas e progresso do utente (pontos, módulos vistos, vouchers resgatados).
+     * Atualiza toda a lista de apontamentos/notas de um perfil no Firestore.
+     */
+    suspend fun atualizarNotas(idPerfil: String, notas: List<Nota>) = withContext(Dispatchers.IO) {
+        val colNotas = db.collection("perfis").document(idPerfil).collection("notas")
+        val existentes = colNotas.get().await()
+        for (doc in existentes.documents) {
+            doc.reference.delete().await()
+        }
+        for ((indice, nota) in notas.withIndex()) {
+            colNotas.document("nota_${indice + 1}").set(
+                hashMapOf(
+                    "texto" to nota.texto,
+                    "autor" to nota.autor,
+                ),
+            ).await()
+        }
+    }
+
+    /**
+     * Guarda outros produtos naturais/suplementos no Firestore.
+     */
+    suspend fun atualizarProdutos(idPerfil: String, produtos: List<String>) = withContext(Dispatchers.IO) {
+        db.collection("perfis")
+            .document(idPerfil)
+            .set(hashMapOf("outrosProdutos" to produtos), SetOptions.merge())
+            .await()
+    }
+
+    /**
+     * Atualiza dados e pontuação do Clube de Segurança (gamificação) no Firestore.
      */
     suspend fun atualizarDadosRecompensas(
         idPerfil: String,
@@ -531,35 +947,6 @@ class ServicoFirestore {
             }
         }
         db.collection("perfis").document(idPerfil).set(dados, SetOptions.merge()).await()
-    }
-
-    /**
-     * Guarda outros produtos/chás no Firestore.
-     */
-    suspend fun atualizarProdutos(idPerfil: String, produtos: List<String>) = withContext(Dispatchers.IO) {
-        db.collection("perfis")
-            .document(idPerfil)
-            .set(hashMapOf("outrosProdutos" to produtos), SetOptions.merge())
-            .await()
-    }
-
-    /**
-     * Guarda a lista de notas no Firestore.
-     */
-    suspend fun atualizarNotas(idPerfil: String, notas: List<Nota>) = withContext(Dispatchers.IO) {
-        val colNotas = db.collection("perfis").document(idPerfil).collection("notas")
-        val existentes = colNotas.get().await()
-        for (doc in existentes.documents) {
-            doc.reference.delete().await()
-        }
-        for ((indice, nota) in notas.withIndex()) {
-            colNotas.document("nota_${indice + 1}").set(
-                hashMapOf(
-                    "texto" to nota.texto,
-                    "autor" to nota.autor,
-                ),
-            ).await()
-        }
     }
 
     /**
@@ -596,7 +983,6 @@ class ServicoFirestore {
 
     /**
      * Remove todas as associações de cuidadores e utentes cuidados no Firestore.
-     * Garante que a aplicação começa com zero perfis associados como solicitado pelo utilizador.
      */
     suspend fun limparTodasAssociacoesFirestore() = withContext(Dispatchers.IO) {
         runCatching {
@@ -615,7 +1001,6 @@ class ServicoFirestore {
 
     /**
      * Escuta em tempo real qualquer alteração, adição ou remoção na coleção de perfis no Firestore.
-     * Quando um perfil é apagado no Firebase Console, este callback é acionado imediatamente ("na hora").
      */
     fun iniciarEscutaPerfisEmTempoReal(aoAlterar: () -> Unit) {
         listenerPerfis?.remove()

@@ -24,9 +24,11 @@ import pt.ulsbe.pontesaude.data.room.serializarListaString
 import pt.ulsbe.pontesaude.data.room.serializarVouchers
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
+import pt.ulsbe.pontesaude.model.ModuloSaude
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.RecompensaSeguranca
+import pt.ulsbe.pontesaude.model.VideoBibliotecaSaude
 import pt.ulsbe.pontesaude.model.VoucherResgatado
 
 /**
@@ -82,6 +84,10 @@ class RepositorioApp(context: Context) {
     val vouchersResgatados = mutableStateListOf<VoucherResgatado>()
     val pessoasCuidadas = mutableStateListOf<Perfil>()
     val todosOsPerfis = mutableStateListOf<Perfil>()
+
+    val modulosSaude = mutableStateListOf<ModuloSaude>()
+    val videosBiblioteca = mutableStateListOf<VideoBibliotecaSaude>()
+    val catalogoRecompensas = mutableStateListOf<RecompensaSeguranca>()
 
     init {
         // Remover perfis associados antigos para começar do zero com controlo do utilizador
@@ -140,7 +146,19 @@ class RepositorioApp(context: Context) {
         val meuPerfil = todosOsPerfis.find { it.id == utenteSessaoId }
         val idsCuidados = meuPerfil?.perfisCuidadosIds.orEmpty()
         pessoasCuidadas.clear()
-        pessoasCuidadas.addAll(todosOsPerfis.filter { it.id in idsCuidados })
+        val encontradas = todosOsPerfis.filter { it.id in idsCuidados }
+        pessoasCuidadas.addAll(encontradas)
+        for (p in pessoasCuidadas) {
+            if (!listaConsultas.containsKey(p.id) && p.consultas.isNotEmpty()) {
+                listaConsultas[p.id] = p.consultas
+            }
+            if (!listaNotas.containsKey(p.id) && p.notas.isNotEmpty()) {
+                listaNotas[p.id] = p.notas
+            }
+            if (!listaMedicamentos.containsKey(p.id) && p.medicamentos.isNotEmpty()) {
+                listaMedicamentos[p.id] = p.medicamentos
+            }
+        }
         if (pessoasCuidadas.isEmpty()) {
             modoCuidador = false
             preferencias.edit().putBoolean("caregiver", false).apply()
@@ -500,7 +518,7 @@ class RepositorioApp(context: Context) {
         }
     }
 
-    fun notas(perfil: Perfil): List<Nota> = listaNotas[perfil.id].orEmpty()
+    fun notas(perfil: Perfil): List<Nota> = listaNotas[perfil.id] ?: perfil.notas
 
     fun adicionarNota(perfil: Perfil, nota: Nota) {
         val atualizadas = listOf(nota) + notas(perfil)
@@ -670,6 +688,26 @@ class RepositorioApp(context: Context) {
 
     private fun carregarTudoDoRoomESincronizar() {
         scope.launch(Dispatchers.IO) {
+            val modulosDb = dbRoom.moduloDao().obterTodos().map { it.paraModelo() }
+            val videosDb = dbRoom.videoDao().obterTodos().map { it.paraModelo() }
+            val recompsDb = dbRoom.recompensaDao().obterTodas().map { it.paraModelo() }
+            if (modulosDb.isNotEmpty() || videosDb.isNotEmpty() || recompsDb.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    if (modulosDb.isNotEmpty()) {
+                        modulosSaude.clear()
+                        modulosSaude.addAll(modulosDb)
+                    }
+                    if (videosDb.isNotEmpty()) {
+                        videosBiblioteca.clear()
+                        videosBiblioteca.addAll(videosDb)
+                    }
+                    if (recompsDb.isNotEmpty()) {
+                        catalogoRecompensas.clear()
+                        catalogoRecompensas.addAll(recompsDb)
+                    }
+                }
+            }
+
             val perfisDb = dbRoom.perfilDao().obterTodos()
             if (perfisDb.isNotEmpty()) {
                 val medsMap = mutableMapOf<String, List<Medicamento>>()
@@ -736,6 +774,26 @@ class RepositorioApp(context: Context) {
             withContext(Dispatchers.Main) {
                 estaASincronizarFirestore = true
                 estadoSincronizacaoFirestore = "A sincronizar dados da nuvem..."
+            }
+
+            // Sincronizar Módulos, Vídeos e Recompensas diretamente do Cloud Firestore
+            runCatching {
+                val modulosRemotos = servicoFirestore.obterModulosSaude()
+                val videosRemotos = servicoFirestore.obterVideosBiblioteca()
+                val recompsRemotas = servicoFirestore.obterCatalogoRecompensas()
+
+                dbRoom.moduloDao().inserirVarios(modulosRemotos.map { it.paraEntidade() })
+                dbRoom.videoDao().inserirVarios(videosRemotos.map { it.paraEntidade() })
+                dbRoom.recompensaDao().inserirVarias(recompsRemotas.map { it.paraEntidade() })
+
+                withContext(Dispatchers.Main) {
+                    modulosSaude.clear()
+                    modulosSaude.addAll(modulosRemotos)
+                    videosBiblioteca.clear()
+                    videosBiblioteca.addAll(videosRemotos)
+                    catalogoRecompensas.clear()
+                    catalogoRecompensas.addAll(recompsRemotas)
+                }
             }
 
             val resultado = servicoFirestore.carregarTodosOsPerfis()
