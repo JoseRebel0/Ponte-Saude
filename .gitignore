@@ -1,0 +1,54 @@
+# ==========================================
+# GITIGNORE - PONTE SAÚDE (ANDROID & FIREBASE)
+# ==========================================
+
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated build files
+bin/
+gen/
+out/
+build/
+app/build/
+.gradle/
+.kotlin/
+
+# Local configuration file (Android SDK path, etc.)
+local.properties
+
+# Log files
+*.log
+
+# Android Studio temp / capture folders
+.navigation/
+captures/
+.externalNativeBuild
+.cxx/
+
+# IntelliJ IDEA / Android Studio project files
+*.iml
+.idea/
+!.idea/vcs.xml
+
+# Keystore files
+*.jks
+*.keystore
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
