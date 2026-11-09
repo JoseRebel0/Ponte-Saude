@@ -2,53 +2,62 @@
 # GITIGNORE - PONTE SAÚDE (ANDROID & FIREBASE)
 # ==========================================
 
-# Built application files
+# ------------------------------------------
+# Configurações Específicas do Computador Local
+# (Cada colega tem o seu caminho do Android SDK na sua máquina)
+# ------------------------------------------
+local.properties
+
+# ------------------------------------------
+# Ficheiros e Pastas de Build e Cache Gerados
+# (Nunca devem ir para o git para evitar conflitos de compilação)
+# ------------------------------------------
 *.apk
 *.aar
 *.ap_
 *.aab
-
-# Files for the ART/Dalvik VM
 *.dex
-
-# Java class files
 *.class
-
-# Generated build files
 bin/
 gen/
 out/
 build/
 app/build/
+**/build/
 .gradle/
 .kotlin/
 
-# Local configuration file (Android SDK path, etc.)
-local.properties
-
-# Log files
-*.log
-
-# Android Studio temp / capture folders
+# ------------------------------------------
+# Android Studio, IntelliJ IDEA & Ferramentas Nativas
+# ------------------------------------------
+.idea/
+!.idea/vcs.xml
+*.iml
+*.ipr
+*.iws
 .navigation/
 captures/
 .externalNativeBuild
 .cxx/
+*.hprof
 
-# IntelliJ IDEA / Android Studio project files
-*.iml
-.idea/
-!.idea/vcs.xml
+# ------------------------------------------
+# Ficheiros de Registo (Logs)
+# ------------------------------------------
+*.log
 
-# Keystore files
-*.jks
-*.keystore
+# ------------------------------------------
+# Ficheiros Temporários do Sistema Operativo
+# ------------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 
-# OS specific files
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db

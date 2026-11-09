@@ -82,7 +82,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.data.calcularNivelSeguranca
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
@@ -150,7 +149,7 @@ fun EcraSaude(
     aoAlternarModulo: (String) -> Unit,
     aoNavegar: (SeparadorApp) -> Unit,
 ) {
-    val modulo = DadosIniciais.modulos.find { it.id == idModuloAberto }
+    val modulo = repositorio?.modulosSaude?.find { it.id == idModuloAberto }
     if (modulo != null) {
         EcraModulo(
             modulo = modulo,
@@ -461,7 +460,8 @@ fun EcraSaude(
                     Text("Toque para abrir, ouvir e acumular pontos de segurança", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            items(DadosIniciais.modulos, key = { it.id }) { item ->
+            val listaModulos = repositorio?.modulosSaude ?: emptyList()
+            items(listaModulos, key = { it.id }) { item ->
                 val concluido = item.id in concluidos
                 Card(
                     modifier = Modifier
@@ -548,7 +548,8 @@ fun EcraSaude(
                     Text("Vídeos educativos do SNS no YouTube · Assista e ganhe +30 pontos de literacia", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            items(DadosIniciais.videosBiblioteca, key = { it.id }) { video ->
+            val listaVideos = repositorio?.videosBiblioteca ?: emptyList()
+            items(listaVideos, key = { it.id }) { video ->
                 val jaVisto = repositorio?.videosAssistidos?.contains(video.id) == true
                 Card(
                     modifier = Modifier
@@ -662,6 +663,7 @@ fun EcraSaude(
     if (mostrarDialogoResgate) {
         DialogoResgateRecompensas(
             pontosAtuais = repositorio?.pontosSeguranca ?: 50,
+            recompensas = repositorio?.catalogoRecompensas ?: emptyList(),
             aoResgatar = { recompensa ->
                 mostrarDialogoResgate = false
                 val voucher = repositorio?.resgatarRecompensa(recompensa)
@@ -776,7 +778,7 @@ fun EcraModulo(
                 }
                 TipoModulo.CRIANCAS -> item { ModuloCriancas(plataforma) }
                 TipoModulo.CONTACTOS -> item { ModuloContactos(plataforma) }
-                TipoModulo.RESUMO -> item { ModuloResumo(concluidos, aoAbrir) }
+                TipoModulo.RESUMO -> item { ModuloResumo(concluidos, repositorio?.modulosSaude ?: emptyList(), aoAbrir) }
                 TipoModulo.PERGUNTAS -> item { Button({ aoNavegar(SeparadorApp.NOTAS) }, Modifier.fillMaxWidth()) { Text("Preparar perguntas para o médico") } }
                 TipoModulo.MEDICAMENTOS -> item { Button({ aoNavegar(SeparadorApp.MEDICACAO) }, Modifier.fillMaxWidth()) { Text("Abrir a minha lista") } }
                 TipoModulo.INFO -> Unit
@@ -1052,10 +1054,14 @@ private fun ModuloContactos(plataforma: ServicosDispositivo) {
 }
 
 @Composable
-private fun ModuloResumo(concluidos: List<String>, aoAbrir: (String?) -> Unit) {
+private fun ModuloResumo(
+    concluidos: List<String>,
+    modulos: List<ModuloSaude>,
+    aoAbrir: (String?) -> Unit,
+) {
     val respostas = remember { mutableStateMapOf<Int, Boolean>() }
     val perguntas = listOf("Sei porque uso a pulseira.", "Sei dizer o nome dos meus medicamentos.", "Digo quando não percebo.", "Sei a quem ligar se tiver dúvidas.")
-    val restantes = DadosIniciais.modulos.filter { it.tipo != TipoModulo.RESUMO && it.id !in concluidos }
+    val restantes = modulos.filter { it.tipo != TipoModulo.RESUMO && it.id !in concluidos }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         CartaoApp {
             Column {
@@ -1094,6 +1100,7 @@ private fun ModuloResumo(concluidos: List<String>, aoAbrir: (String?) -> Unit) {
 @Composable
 private fun DialogoResgateRecompensas(
     pontosAtuais: Int,
+    recompensas: List<RecompensaSeguranca>,
     aoResgatar: (RecompensaSeguranca) -> Unit,
     aoFechar: () -> Unit,
 ) {
@@ -1130,7 +1137,7 @@ private fun DialogoResgateRecompensas(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(DadosIniciais.recompensas) { recompensa ->
+                items(recompensas) { recompensa ->
                     val suficiente = pontosAtuais >= recompensa.pontos
                     Column(
                         Modifier
@@ -1431,7 +1438,16 @@ private fun DialogoSucessoVoucher(
 @Preview(name = "Ecrã Saúde", showBackground = true)
 @Composable
 fun PreVisualizacaoEcraSaude() {
-    val perfil = DadosIniciais.perfis.first()
+    val perfil = Perfil(
+        id = "1",
+        nome = "Utente Demonstração",
+        nomeCurto = "Utente",
+        relacao = "Utente",
+        iniciais = "UD",
+        numeroUtente = "189 423 761",
+        tipoSanguineo = "A+",
+        alergias = "Sem alergias",
+    )
     TemaPonteSaude(textoGrande = false) {
         EcraSaude(
             perfil = perfil,
@@ -1448,8 +1464,25 @@ fun PreVisualizacaoEcraSaude() {
 @Preview(name = "Ecrã Módulo Detalhe", showBackground = true)
 @Composable
 fun PreVisualizacaoEcraModulo() {
-    val perfil = DadosIniciais.perfis.first()
-    val modulo = DadosIniciais.modulos.first()
+    val perfil = Perfil(
+        id = "1",
+        nome = "Utente Demonstração",
+        nomeCurto = "Utente",
+        relacao = "Utente",
+        iniciais = "UD",
+        numeroUtente = "189 423 761",
+        tipoSanguineo = "A+",
+        alergias = "Sem alergias",
+    )
+    val modulo = ModuloSaude(
+        id = "identificacao",
+        titulo = "Identificação inequívoca",
+        subtitulo = "Pulseira e nome certo",
+        icone = "badge",
+        tipo = TipoModulo.INFO,
+        conteudos = listOf("A pulseira serve para garantir a sua segurança."),
+        fala = "A pulseira serve para garantir a sua segurança.",
+    )
     TemaPonteSaude(textoGrande = false) {
         EcraModulo(
             modulo = modulo,

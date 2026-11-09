@@ -29,8 +29,11 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.material.icons.rounded.SupervisorAccount
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -58,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
@@ -111,12 +113,15 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
 
     fun adicionarNotaAoRegisto(texto: String) {
         if (texto.isNotBlank()) {
-            repositorio.adicionarNota(perfil, Nota(texto.trim(), if (repositorio.modoCuidador) "Cuidador" else "Eu"))
+            val autorNota = if (repositorio.modoCuidador) "Cuidador de ${perfil.nomeCurto}" else "Eu"
+            repositorio.adicionarNota(perfil, Nota(texto.trim(), autorNota))
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra("Notas", "Tradutor IA & Apontamentos", perfil.iniciais)
+        val tituloEcra = if (repositorio.modoCuidador) "Notas · ${perfil.nome}" else "Notas"
+        val subtituloEcra = if (repositorio.modoCuidador) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
@@ -136,6 +141,42 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                 state = estadoLista,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // CARTÃO DE MODO CUIDADOR
+                if (repositorio.modoCuidador) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(16.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.SupervisorAccount,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "Notas e Dúvidas de ${perfil.nome}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Text(
+                                        "Nº SNS: ${perfil.numeroUtente} · Dados sincronizados com o cuidador",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Atenuado,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 1. TRADUTOR MÉDICO & ASSISTENTE IA NO TOPO
                 item {
                     CartaoApp {
@@ -376,7 +417,13 @@ fun EcraNotas(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosD
 @Preview(name = "Ecrã Apontamentos", showBackground = true)
 @Composable
 fun PreVisualizacaoEcraApontamentos() {
-    val perfil = DadosIniciais.perfis.first()
+    val perfil = Perfil(
+        id = "utente_1",
+        nome = "Maria Inácia Silva",
+        nomeCurto = "Maria",
+        iniciais = "MS",
+        notas = listOf(Nota("Perguntar sobre a tensão matinal", "Eu")),
+    )
     val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
         EcraApontamentos(perfil = perfil, repositorio = remember { RepositorioApp(contexto) }, plataforma = ServicosDispositivo(null))

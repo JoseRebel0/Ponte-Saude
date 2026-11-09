@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.VpnKey
@@ -57,7 +58,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import pt.ulsbe.pontesaude.data.DadosIniciais
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.ui.ServicosDispositivo
@@ -380,6 +380,60 @@ fun EcraDefinicoes(
             }
             item {
                 CartaoApp {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(Color(0xFFECFDF5), CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Security,
+                                    contentDescription = null,
+                                    tint = Color(0xFF059669),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Proteção e Cifra RGPD", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Artigo 9.º e 32.º do Regulamento Geral de Proteção de Dados",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Atenuado,
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = Superficie2)
+                        Text(
+                            "Os seus dados de identificação pessoal (NIF, Cartão de Cidadão, SNS e contactos) são cifrados no dispositivo segundo o RGPD. Os dados clínicos essenciais (sangue, alergias, consultas, medicação e notas) permanecem visíveis e acessíveis para o acompanhamento e gestão clínica da sua saúde.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Atenuado,
+                            lineHeight = 18.sp,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFECFDF5))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF059669), modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Proteção RGPD ativa nos dados de identificação pessoal",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF065F46),
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                CartaoApp {
                     Column {
                         Text("Dados guardados neste dispositivo", fontWeight = FontWeight.SemiBold)
                         Text(
@@ -462,7 +516,12 @@ private fun BotaoItemTeste(
 @Preview(name = "Ecrã Definições", showBackground = true)
 @Composable
 fun PreVisualizacaoEcraDefinicoes() {
-    val perfil = DadosIniciais.perfis.first()
+    val perfil = Perfil(
+        id = "utente_1",
+        nome = "Maria Inácia Silva",
+        nomeCurto = "Maria",
+        iniciais = "MS",
+    )
     val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
         EcraDefinicoes(perfil = perfil, repositorio = remember { RepositorioApp(contexto) })

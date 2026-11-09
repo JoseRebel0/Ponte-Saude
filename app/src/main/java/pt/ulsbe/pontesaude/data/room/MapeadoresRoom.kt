@@ -4,8 +4,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
+import pt.ulsbe.pontesaude.model.ModuloSaude
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
+import pt.ulsbe.pontesaude.model.RecompensaSeguranca
+import pt.ulsbe.pontesaude.model.TipoModulo
+import pt.ulsbe.pontesaude.model.VideoBibliotecaSaude
 import pt.ulsbe.pontesaude.model.VoucherResgatado
 
 fun PerfilEntity.paraModelo(
@@ -138,6 +142,76 @@ fun NotaEntity.paraModelo(): Nota {
     return Nota(
         texto = texto,
         autor = autor,
+    )
+}
+
+fun ModuloEntity.paraModelo(): ModuloSaude {
+    val tipoEnum = runCatching { TipoModulo.valueOf(tipo) }.getOrDefault(TipoModulo.INFO)
+    val conteudosLista = conteudosJson.deserializarListaString()
+    return ModuloSaude(
+        id = id,
+        titulo = titulo,
+        subtitulo = subtitulo,
+        icone = icone,
+        tipo = tipoEnum,
+        conteudos = conteudosLista,
+        fala = fala,
+    )
+}
+
+fun ModuloSaude.paraEntidade(): ModuloEntity {
+    return ModuloEntity(
+        id,
+        titulo,
+        subtitulo,
+        icone,
+        tipo.name,
+        conteudos.serializarListaString(),
+        fala,
+    )
+}
+
+fun VideoEntity.paraModelo(): VideoBibliotecaSaude {
+    return VideoBibliotecaSaude(
+        id = id,
+        titulo = titulo,
+        descricao = descricao,
+        duracao = duracao,
+        urlYoutube = urlYoutube,
+        pontos = pontos,
+    )
+}
+
+fun VideoBibliotecaSaude.paraEntidade(): VideoEntity {
+    return VideoEntity(
+        id,
+        titulo,
+        descricao,
+        duracao,
+        urlYoutube,
+        pontos,
+    )
+}
+
+fun RecompensaEntity.paraModelo(): RecompensaSeguranca {
+    return RecompensaSeguranca(
+        id = id,
+        titulo = titulo,
+        descricao = descricao,
+        pontos = pontos,
+        icone = icone,
+        localLevantamento = localLevantamento,
+    )
+}
+
+fun RecompensaSeguranca.paraEntidade(): RecompensaEntity {
+    return RecompensaEntity(
+        id,
+        titulo,
+        descricao,
+        pontos,
+        icone,
+        localLevantamento,
     )
 }
 

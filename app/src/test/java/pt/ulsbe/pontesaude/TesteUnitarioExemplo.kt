@@ -4,7 +4,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import pt.ulsbe.pontesaude.data.DadosIniciais
+import pt.ulsbe.pontesaude.model.Consulta
+import pt.ulsbe.pontesaude.model.Medicamento
+import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.ui.screens.formatarHoraParaFala
 import pt.ulsbe.pontesaude.ui.screens.normalizarTexto
 import pt.ulsbe.pontesaude.ui.screens.pesquisarGlossario
@@ -12,18 +14,24 @@ import pt.ulsbe.pontesaude.ui.screens.pesquisarGlossario
 class TesteUnitarioExemplo {
 
     @Test
-    fun testarConsistenciaDadosIniciais() {
-        assertTrue("A lista de módulos não deve estar vazia", DadosIniciais.modulos.isNotEmpty())
-        assertTrue("A lista de perfis não deve estar vazia", DadosIniciais.perfis.isNotEmpty())
-        assertTrue("A lista de perguntas não deve estar vazia", DadosIniciais.perguntasMedico.isNotEmpty())
+    fun testarConsistenciaPerfil() {
+        val perfil = Perfil(
+            id = "utente_1",
+            nome = "Maria Inácia Silva",
+            nomeCurto = "Maria",
+            iniciais = "MS",
+            consultas = listOf(Consulta(1, "15", "Nov", "Cardiologia", "ULSBE", "Consulta")),
+            medicamentos = listOf(
+                Medicamento(1L, "Ramipril 5mg", "Pressão arterial", "Ramipril", "08:00", 0xFF3E63DD, true),
+                Medicamento(2L, "Ramipril Generis 5mg", "Pressão arterial", "Ramipril", "20:00", 0xFF3E63DD, true),
+            ),
+        )
 
-        DadosIniciais.perfis.forEach { perfil ->
-            assertNotNull(perfil.nome)
-            assertNotNull(perfil.tipoSanguineo)
-            assertNotNull(perfil.alergias)
-            assertTrue("Todos os perfis devem ter consultas", perfil.consultas.isNotEmpty())
-            assertTrue("Todos os perfis devem ter medicamentos", perfil.medicamentos.isNotEmpty())
-        }
+        assertNotNull(perfil.nome)
+        assertNotNull(perfil.tipoSanguineo)
+        assertNotNull(perfil.alergias)
+        assertTrue("O perfil deve ter consultas", perfil.consultas.isNotEmpty())
+        assertTrue("O perfil deve ter medicamentos", perfil.medicamentos.isNotEmpty())
     }
 
     @Test
@@ -56,8 +64,10 @@ class TesteUnitarioExemplo {
 
     @Test
     fun testarDeteccaoDuplicados() {
-        val perfilEu = DadosIniciais.perfis.first { it.id == "self" }
-        val meds = perfilEu.medicamentos
+        val meds = listOf(
+            Medicamento(1L, "Ramipril 5mg", "Pressão arterial", "Ramipril", "08:00", 0xFF3E63DD, true),
+            Medicamento(2L, "Triatec 5mg", "Pressão arterial", "ramipril", "20:00", 0xFF3E63DD, true),
+        )
 
         val duplicados = meds
             .filter { medicamento ->
