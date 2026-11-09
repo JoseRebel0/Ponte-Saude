@@ -1,0 +1,50 @@
+package pt.ulsbe.pontesaude
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.core.content.ContextCompat
+import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.ui.NavegacaoApp
+import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+
+class  MainActivity : ComponentActivity() {
+    private val pedirPermissoesApp = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { _ ->
+        // Permissões processadas pelo utilizador
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val permissoesParaPedir = mutableListOf(
+            Manifest.permission.READ_CALENDAR,
+            Manifest.permission.WRITE_CALENDAR,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissoesParaPedir.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val emFalta = permissoesParaPedir.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (emFalta.isNotEmpty()) {
+            pedirPermissoesApp.launch(emFalta.toTypedArray())
+        }
+
+        setContent {
+            val repositorio = remember { RepositorioApp(applicationContext) }
+            val plataforma = remember { ServicosDispositivo(this) }
+            DisposableEffect(Unit) {
+                onDispose { plataforma.fechar() }
+            }
+            NavegacaoApp(repositorio, plataforma)
+        }
+    }
+}
