@@ -88,23 +88,24 @@ class ApiSaudeRemoto(
         videosAssistidos: List<String>? = null,
         vouchers: List<VoucherResgatado>? = null,
     ) = withContext(Dispatchers.IO) {
-        val dados = hashMapOf<String, Any>("pontosSeguranca" to pontos)
-        modulosConcluidos?.let { dados["modulosConcluidos"] = it }
-        modulosOuvidos?.let { dados["modulosOuvidos"] = it }
-        videosAssistidos?.let { dados["videosAssistidos"] = it }
+        val doc = db.collection("perfis").document(idPerfil)
+        doc.update("pontosSeguranca", pontos).await()
+        modulosConcluidos?.let { doc.update("modulosConcluidos", it).await() }
+        modulosOuvidos?.let { doc.update("modulosOuvidos", it).await() }
+        videosAssistidos?.let { doc.update("videosAssistidos", it).await() }
         vouchers?.let { vList ->
-            dados["vouchersResgatados"] = vList.map { v ->
-                hashMapOf(
-                    "id" to v.id,
-                    "idRecompensa" to v.idRecompensa,
-                    "titulo" to v.titulo,
-                    "codigo" to v.codigo,
-                    "dataResgate" to v.dataResgate,
-                    "localLevantamento" to v.localLevantamento,
-                    "pontosUsados" to v.pontosUsados,
+            val dtos = vList.map { v ->
+                VoucherResgatadoDtoRemoto(
+                    id = v.id,
+                    idRecompensa = v.idRecompensa,
+                    titulo = v.titulo,
+                    codigo = v.codigo,
+                    dataResgate = v.dataResgate,
+                    localLevantamento = v.localLevantamento,
+                    pontosUsados = v.pontosUsados,
                 )
             }
+            doc.update("vouchersResgatados", dtos).await()
         }
-        db.collection("perfis").document(idPerfil).set(dados, SetOptions.merge()).await()
     }
 }

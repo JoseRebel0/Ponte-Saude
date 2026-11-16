@@ -18,20 +18,20 @@ class ApiConsultasRemoto(
      * Guarda ou atualiza os detalhes de uma consulta na subcoleção do perfil no Firestore.
      */
     suspend fun guardarConsulta(idPerfil: String, consulta: Consulta) = withContext(Dispatchers.IO) {
-        val dados = hashMapOf(
-            "id" to consulta.id,
-            "dia" to consulta.dia,
-            "mes" to consulta.mes,
-            "titulo" to consulta.titulo,
-            "localizacao" to consulta.localizacao,
-            "tipo" to consulta.tipo,
-            "jejum" to consulta.jejum,
+        val dto = ConsultaDtoRemoto(
+            id = consulta.id,
+            dia = consulta.dia,
+            mes = consulta.mes,
+            titulo = consulta.titulo,
+            localizacao = consulta.localizacao,
+            tipo = consulta.tipo,
+            jejum = consulta.jejum,
         )
         db.collection("perfis")
             .document(idPerfil)
             .collection("consultas")
             .document(consulta.id.toString())
-            .set(dados, SetOptions.merge())
+            .set(dto, SetOptions.merge())
             .await()
     }
 
@@ -59,7 +59,7 @@ class ApiConsultasRemoto(
             .document(idPerfil)
             .collection("consultas")
             .document(idConsulta.toString())
-            .set(hashMapOf("checklistMarcados" to marcados), SetOptions.merge())
+            .update("checklistMarcados", marcados)
             .await()
     }
 
@@ -75,7 +75,7 @@ class ApiConsultasRemoto(
             .document(idPerfil)
             .collection("consultas")
             .document(idConsulta.toString())
-            .set(hashMapOf("checklistCustom" to custom), SetOptions.merge())
+            .update("checklistCustom", custom)
             .await()
     }
 }

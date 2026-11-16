@@ -43,39 +43,39 @@ class ApiPerfisRemoto(
         val docPerfil = db.collection("perfis").document(perfil.id)
 
         val vouchersMapeados = vouchers.map { v ->
-            hashMapOf(
-                "id" to v.id,
-                "idRecompensa" to v.idRecompensa,
-                "titulo" to v.titulo,
-                "codigo" to v.codigo,
-                "dataResgate" to v.dataResgate,
-                "localLevantamento" to v.localLevantamento,
-                "pontosUsados" to v.pontosUsados,
+            VoucherResgatadoDtoRemoto(
+                id = v.id,
+                idRecompensa = v.idRecompensa,
+                titulo = v.titulo,
+                codigo = v.codigo,
+                dataResgate = v.dataResgate,
+                localLevantamento = v.localLevantamento,
+                pontosUsados = v.pontosUsados,
             )
         }
 
-        val dadosPerfil = hashMapOf(
-            "id" to perfil.id,
-            "nome" to perfil.nome,
-            "nomeCurto" to perfil.nomeCurto,
-            "relacao" to perfil.relacao,
-            "iniciais" to perfil.iniciais,
-            "tipoSanguineo" to perfil.tipoSanguineo,
-            "alergias" to perfil.alergias,
-            "nif" to Criptografia.cifrar(perfil.nif),
-            "numeroUtente" to Criptografia.cifrar(perfil.numeroUtente),
-            "cartaoCidadao" to Criptografia.cifrar(perfil.cartaoCidadao),
-            "dataNascimento" to Criptografia.cifrar(perfil.dataNascimento),
-            "telemovel" to Criptografia.cifrar(perfil.telemovel),
-            "email" to Criptografia.cifrar(perfil.email),
-            "perfisCuidadosIds" to perfil.perfisCuidadosIds,
-            "cuidadoresIds" to perfil.cuidadoresIds,
-            "outrosProdutos" to perfil.outrosProdutos,
-            "pontosSeguranca" to pontos,
-            "modulosConcluidos" to modulosConcluidos,
-            "modulosOuvidos" to modulosOuvidos,
-            "videosAssistidos" to videosAssistidos,
-            "vouchersResgatados" to vouchersMapeados,
+        val dadosPerfil = PerfilDtoRemoto(
+            id = perfil.id,
+            nome = perfil.nome,
+            nomeCurto = perfil.nomeCurto,
+            relacao = perfil.relacao,
+            iniciais = perfil.iniciais,
+            tipoSanguineo = perfil.tipoSanguineo,
+            alergias = perfil.alergias,
+            nif = Criptografia.cifrar(perfil.nif),
+            numeroUtente = Criptografia.cifrar(perfil.numeroUtente),
+            cartaoCidadao = Criptografia.cifrar(perfil.cartaoCidadao),
+            dataNascimento = Criptografia.cifrar(perfil.dataNascimento),
+            telemovel = Criptografia.cifrar(perfil.telemovel),
+            email = Criptografia.cifrar(perfil.email),
+            perfisCuidadosIds = perfil.perfisCuidadosIds,
+            cuidadoresIds = perfil.cuidadoresIds,
+            outrosProdutos = perfil.outrosProdutos,
+            pontosSeguranca = pontos,
+            modulosConcluidos = modulosConcluidos,
+            modulosOuvidos = modulosOuvidos,
+            videosAssistidos = videosAssistidos,
+            vouchersResgatados = vouchersMapeados,
         )
 
         docPerfil.set(dadosPerfil, SetOptions.merge()).await()
@@ -83,15 +83,15 @@ class ApiPerfisRemoto(
         // 1. Guardar Medicamentos na subcoleção remota
         val colMedicamentos = docPerfil.collection("medicamentos")
         for (med in perfil.medicamentos) {
-            val dadosMed = hashMapOf(
-                "id" to med.id,
-                "nome" to med.nome,
-                "finalidade" to med.finalidade,
-                "principioAtivo" to med.principioAtivo,
-                "hora" to med.hora,
-                "cor" to med.cor,
-                "ativo" to med.ativo,
-                "fotografia" to (med.fotografia ?: ""),
+            val dadosMed = MedicamentoDtoRemoto(
+                id = med.id,
+                nome = med.nome,
+                finalidade = med.finalidade,
+                principioAtivo = med.principioAtivo,
+                hora = med.hora,
+                cor = med.cor,
+                ativo = med.ativo,
+                fotografia = med.fotografia ?: "",
             )
             colMedicamentos.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
         }
@@ -103,16 +103,16 @@ class ApiPerfisRemoto(
             val marcados = pairChecklist?.first ?: emptyList()
             val custom = pairChecklist?.second ?: emptyList()
 
-            val dadosCons = hashMapOf(
-                "id" to cons.id,
-                "dia" to cons.dia,
-                "mes" to cons.mes,
-                "titulo" to cons.titulo,
-                "localizacao" to cons.localizacao,
-                "tipo" to cons.tipo,
-                "jejum" to cons.jejum,
-                "checklistMarcados" to marcados,
-                "checklistCustom" to custom,
+            val dadosCons = ConsultaDtoRemoto(
+                id = cons.id,
+                dia = cons.dia,
+                mes = cons.mes,
+                titulo = cons.titulo,
+                localizacao = cons.localizacao,
+                tipo = cons.tipo,
+                jejum = cons.jejum,
+                checklistMarcados = marcados,
+                checklistCustom = custom,
             )
             colConsultas.document(cons.id.toString()).set(dadosCons, SetOptions.merge()).await()
         }
@@ -120,9 +120,9 @@ class ApiPerfisRemoto(
         // 3. Guardar Notas na subcoleção remota
         val colNotas = docPerfil.collection("notas")
         for ((idx, nota) in perfil.notas.withIndex()) {
-            val dadosNota = hashMapOf(
-                "texto" to nota.texto,
-                "autor" to nota.autor,
+            val dadosNota = NotaDtoRemoto(
+                texto = nota.texto,
+                autor = nota.autor,
             )
             colNotas.document("nota_${idx + 1}").set(dadosNota, SetOptions.merge()).await()
         }
@@ -288,10 +288,10 @@ class ApiPerfisRemoto(
     suspend fun associarPerfilCuidado(idCuidador: String, idCuidado: String) = withContext(Dispatchers.IO) {
         runCatching {
             db.collection("perfis").document(idCuidador)
-                .set(hashMapOf("perfisCuidadosIds" to FieldValue.arrayUnion(idCuidado)), SetOptions.merge())
+                .update("perfisCuidadosIds", FieldValue.arrayUnion(idCuidado))
                 .await()
             db.collection("perfis").document(idCuidado)
-                .set(hashMapOf("cuidadoresIds" to FieldValue.arrayUnion(idCuidador)), SetOptions.merge())
+                .update("cuidadoresIds", FieldValue.arrayUnion(idCuidador))
                 .await()
         }
     }
@@ -302,10 +302,10 @@ class ApiPerfisRemoto(
     suspend fun desassociarPerfilCuidado(idCuidador: String, idCuidado: String) = withContext(Dispatchers.IO) {
         runCatching {
             db.collection("perfis").document(idCuidador)
-                .set(hashMapOf("perfisCuidadosIds" to FieldValue.arrayRemove(idCuidado)), SetOptions.merge())
+                .update("perfisCuidadosIds", FieldValue.arrayRemove(idCuidado))
                 .await()
             db.collection("perfis").document(idCuidado)
-                .set(hashMapOf("cuidadoresIds" to FieldValue.arrayRemove(idCuidador)), SetOptions.merge())
+                .update("cuidadoresIds", FieldValue.arrayRemove(idCuidador))
                 .await()
         }
     }
@@ -317,12 +317,9 @@ class ApiPerfisRemoto(
         runCatching {
             val snapshot = db.collection("perfis").get().await()
             for (doc in snapshot.documents) {
-                doc.reference.set(
-                    hashMapOf(
-                        "perfisCuidadosIds" to emptyList<String>(),
-                        "cuidadoresIds" to emptyList<String>(),
-                    ),
-                    SetOptions.merge(),
+                doc.reference.update(
+                    "perfisCuidadosIds", emptyList<String>(),
+                    "cuidadoresIds", emptyList<String>(),
                 ).await()
             }
         }

@@ -466,11 +466,7 @@ class ServicosDispositivo(context: Context?) {
             }
 
             val diaInt = dia.toIntOrNull() ?: 15
-            val mesMap = mapOf(
-                "JAN" to 0, "FEV" to 1, "MAR" to 2, "ABR" to 3, "MAI" to 4, "JUN" to 5,
-                "JUL" to 6, "AGO" to 7, "SET" to 8, "OUT" to 9, "NOV" to 10, "DEZ" to 11,
-            )
-            val mesInt = mesMap[mes.uppercase().trim()] ?: Calendar.getInstance().get(Calendar.MONTH)
+            val mesInt = obterIndiceMes(mes)
             val anoAtual = Calendar.getInstance().get(Calendar.YEAR)
             val calInicio = Calendar.getInstance().apply {
                 set(Calendar.YEAR, anoAtual)
@@ -570,11 +566,7 @@ class ServicosDispositivo(context: Context?) {
                 putExtra(CalendarContract.Events.EVENT_LOCATION, localizacao)
 
                 val diaInt = dia.toIntOrNull() ?: 15
-                val mesMap = mapOf(
-                    "JAN" to 0, "FEV" to 1, "MAR" to 2, "ABR" to 3, "MAI" to 4, "JUN" to 5,
-                    "JUL" to 6, "AGO" to 7, "SET" to 8, "OUT" to 9, "NOV" to 10, "DEZ" to 11,
-                )
-                val mesInt = mesMap[mes.uppercase().trim()] ?: Calendar.getInstance().get(Calendar.MONTH)
+                val mesInt = obterIndiceMes(mes)
                 val cal = Calendar.getInstance().apply {
                     set(Calendar.MONTH, mesInt)
                     set(Calendar.DAY_OF_MONTH, diaInt)
@@ -588,6 +580,22 @@ class ServicosDispositivo(context: Context?) {
             ctx.startActivity(intent)
             true
         }.getOrDefault(false)
+    }
+
+    private fun obterIndiceMes(mes: String): Int = when (mes.uppercase().trim()) {
+        "JAN" -> 0
+        "FEV" -> 1
+        "MAR" -> 2
+        "ABR" -> 3
+        "MAI" -> 4
+        "JUN" -> 5
+        "JUL" -> 6
+        "AGO" -> 7
+        "SET" -> 8
+        "OUT" -> 9
+        "NOV" -> 10
+        "DEZ" -> 11
+        else -> Calendar.getInstance().get(Calendar.MONTH)
     }
 
     fun falar(texto: String) {
