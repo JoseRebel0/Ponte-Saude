@@ -1,35 +1,27 @@
-# ==========================================
-# GITIGNORE - PONTE SAÚDE (ANDROID & FIREBASE)
-# ==========================================
-
-# ------------------------------------------
-# Configurações Específicas do Computador Local
-# (Cada colega tem o seu caminho do Android SDK na sua máquina)
-# ------------------------------------------
 local.properties
+.gradle/
+.kotlin/
+.gradletasknamecache
+configuration-cache/
 
-# ------------------------------------------
-# Ficheiros e Pastas de Build e Cache Gerados
-# (Nunca devem ir para o git para evitar conflitos de compilação)
-# ------------------------------------------
-*.apk
-*.aar
-*.ap_
-*.aab
-*.dex
-*.class
+build/
+**/build/
 bin/
 gen/
 out/
-build/
-app/build/
-**/build/
-.gradle/
-.kotlin/
+target/
 
-# ------------------------------------------
-# Android Studio, IntelliJ IDEA & Ferramentas Nativas
-# ------------------------------------------
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+
+proguard/
+**/proguard/
+*.pro.mapping
+
 .idea/
 !.idea/vcs.xml
 *.iml
@@ -37,27 +29,36 @@ app/build/
 *.iws
 .navigation/
 captures/
-.externalNativeBuild
+.externalNativeBuild/
 .cxx/
-*.hprof
+.vscode/
 
-# ------------------------------------------
-# Ficheiros de Registo (Logs)
-# ------------------------------------------
+*.jks
+*.keystore
+signing.properties
+private.key
+*.pem
+
 *.log
+*.hprof
+*.trace
+reports/
+lint/
 
-# ------------------------------------------
-# Ficheiros Temporários do Sistema Operativo
-# ------------------------------------------
-# Windows
 Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+~$*
+*.tmp
 
-# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
+
+*~
+.directory
+
+!gradle-wrapper.jar
