@@ -25,12 +25,11 @@ class ApiNotasRemoto(
             doc.reference.delete().await()
         }
         for ((indice, nota) in notas.withIndex()) {
-            colNotas.document("nota_${indice + 1}").set(
-                hashMapOf(
-                    "texto" to nota.texto,
-                    "autor" to nota.autor,
-                ),
-            ).await()
+            val dto = NotaDtoRemoto(
+                texto = nota.texto,
+                autor = nota.autor,
+            )
+            colNotas.document("nota_${indice + 1}").set(dto).await()
         }
     }
 
@@ -40,7 +39,7 @@ class ApiNotasRemoto(
     suspend fun atualizarProdutos(idPerfil: String, produtos: List<String>) = withContext(Dispatchers.IO) {
         db.collection("perfis")
             .document(idPerfil)
-            .set(hashMapOf("outrosProdutos" to produtos), SetOptions.merge())
+            .update("outrosProdutos", produtos)
             .await()
     }
 }

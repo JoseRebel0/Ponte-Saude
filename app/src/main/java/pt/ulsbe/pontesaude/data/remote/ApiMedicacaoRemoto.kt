@@ -18,21 +18,21 @@ class ApiMedicacaoRemoto(
      * Guarda ou atualiza a informação de um medicamento na subcoleção do perfil no Firestore.
      */
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) = withContext(Dispatchers.IO) {
-        val dados = hashMapOf(
-            "id" to med.id,
-            "nome" to med.nome,
-            "finalidade" to med.finalidade,
-            "principioAtivo" to med.principioAtivo,
-            "hora" to med.hora,
-            "cor" to med.cor,
-            "ativo" to med.ativo,
-            "fotografia" to (med.fotografia ?: ""),
+        val dto = MedicamentoDtoRemoto(
+            id = med.id,
+            nome = med.nome,
+            finalidade = med.finalidade,
+            principioAtivo = med.principioAtivo,
+            hora = med.hora,
+            cor = med.cor,
+            ativo = med.ativo,
+            fotografia = med.fotografia ?: "",
         )
         db.collection("perfis")
             .document(idPerfil)
             .collection("medicamentos")
             .document(med.id.toString())
-            .set(dados, SetOptions.merge())
+            .set(dto, SetOptions.merge())
             .await()
     }
 
