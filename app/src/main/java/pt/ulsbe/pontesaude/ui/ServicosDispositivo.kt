@@ -664,8 +664,7 @@ class ServicosDispositivo(context: Context?) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val rede = cm.activeNetwork ?: return false
                 val cap = cm.getNetworkCapabilities(rede) ?: return false
-                cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
             } else {
                 @Suppress("DEPRECATION")
                 cm.activeNetworkInfo?.isConnectedOrConnecting == true

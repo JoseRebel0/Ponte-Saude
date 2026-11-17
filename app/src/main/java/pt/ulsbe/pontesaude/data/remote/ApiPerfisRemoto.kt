@@ -92,6 +92,7 @@ class ApiPerfisRemoto(
                 cor = med.cor,
                 ativo = med.ativo,
                 fotografia = med.fotografia ?: "",
+                laboratorio = med.laboratorio,
             )
             colMedicamentos.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
         }
@@ -199,6 +200,7 @@ class ApiPerfisRemoto(
                             cor = mDoc.getLong("cor") ?: 0xFF3E63DD,
                             ativo = mDoc.getBoolean("ativo") ?: true,
                             fotografia = Criptografia.decifrar(mDoc.getString("fotografia")).takeIf { it.isNotBlank() },
+                            laboratorio = Criptografia.decifrar(mDoc.getString("laboratorio")),
                         )
                     }.getOrNull()
                 }
@@ -321,6 +323,42 @@ class ApiPerfisRemoto(
                     "perfisCuidadosIds", emptyList<String>(),
                     "cuidadoresIds", emptyList<String>(),
                 ).await()
+            }
+        }
+    }
+
+    /**
+     * Elimina um perfil e todas as suas subcoleções (medicamentos, consultas, notas) do Firestore,
+     * limpando também as referências de associação nos restantes perfis.
+     */
+    suspend fun apagarPerfil(idPerfil: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            val docRef = db.collection("perfis").document(idPerfil)
+            val meds = docRef.collection("medicamentos").get().await()
+            for (m in meds.documents) {
+                m.reference.delete().await()
+            }
+            val cons = docRef.collection("consultas").get().await()
+            for (c in cons.documents) {
+                c.reference.delete().await()
+            }
+            val notas = docRef.collection("notas").get().await()
+            for (n in notas.documents) {
+                n.reference.delete().await()
+            }
+            docRef.delete().await()
+
+            val snapCuidados = db.collection("perfis")
+                .whereArrayContains("perfisCuidadosIds", idPerfil)
+                .get().await()
+            for (d in snapCuidados.documents) {
+                d.reference.update("perfisCuidadosIds", FieldValue.arrayRemove(idPerfil)).await()
+            }
+            val snapCuidadores = db.collection("perfis")
+                .whereArrayContains("cuidadoresIds", idPerfil)
+                .get().await()
+            for (d in snapCuidadores.documents) {
+                d.reference.update("cuidadoresIds", FieldValue.arrayRemove(idPerfil)).await()
             }
         }
     }

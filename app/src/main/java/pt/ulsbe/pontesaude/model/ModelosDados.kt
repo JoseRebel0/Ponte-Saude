@@ -32,6 +32,7 @@ data class Medicamento(
     val cor: Long,
     val ativo: Boolean,
     val fotografia: String? = null,
+    val laboratorio: String = "",
 ) {
     val listaHorarios: List<String>
         get() = hora.split(",", ";", "·").map { it.trim() }.filter { it.isNotBlank() }.ifEmpty { listOf(hora.trim().ifBlank { "08:00" }) }

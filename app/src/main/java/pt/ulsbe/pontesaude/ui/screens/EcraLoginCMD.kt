@@ -3,6 +3,7 @@ package pt.ulsbe.pontesaude.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -150,6 +153,7 @@ fun EcraLoginCMD(
     var emProgresso by remember { mutableStateOf(false) }
     var textoProgresso by remember { mutableStateOf("A contactar Chave Móvel Digital...") }
     var aCriarPerfil by remember { mutableStateOf(false) }
+    var aApagarPerfis by remember { mutableStateOf(false) }
     var mensagemSucesso by remember { mutableStateOf<String?>(null) }
 
     // Procedimento de Login Simulado com Feedback de Carregamento
@@ -831,7 +835,7 @@ fun EcraLoginCMD(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                             Box(
                                                 modifier = Modifier
                                                     .size(34.dp)
@@ -860,13 +864,38 @@ fun EcraLoginCMD(
                                             }
                                         }
 
-                                        if (selecionado) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.CheckCircle,
-                                                contentDescription = null,
-                                                tint = MarcaMedio,
-                                                modifier = Modifier.size(20.dp),
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (selecionado) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = MarcaMedio,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    escopo.launch {
+                                                        repositorio.apagarPerfil(perfil.id)
+                                                        val restante = perfisDemonstracao.firstOrNull()
+                                                        perfilEscolhidoId = restante?.id ?: "1"
+                                                        if (restante != null) {
+                                                            telemovel = restante.telemovel.replace("+351 ", "")
+                                                            nif = restante.nif
+                                                        }
+                                                        mensagemSucesso = "Perfil '${perfil.nome}' apagado."
+                                                    }
+                                                },
+                                                modifier = Modifier.size(28.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.DeleteOutline,
+                                                    contentDescription = "Apagar perfil",
+                                                    tint = Color(0xFFDC2626).copy(alpha = 0.8f),
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -897,7 +926,7 @@ fun EcraLoginCMD(
                                     .height(48.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
-                                enabled = !aCriarPerfil,
+                                enabled = !aCriarPerfil && !aApagarPerfis,
                             ) {
                                 if (aCriarPerfil) {
                                     CircularProgressIndicator(
@@ -911,6 +940,60 @@ fun EcraLoginCMD(
                                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
                                     Text("Criar Perfil Aleatório no Firebase", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            // Botão Simples para Apagar Perfis Aleatórios (1 Clique, Sem Confirmação)
+                            if (perfisDemonstracao.any { it.email.endsWith("@exemplo.pt") || it.id != "1" }) {
+                                OutlinedButton(
+                                    onClick = {
+                                        aApagarPerfis = true
+                                        mensagemSucesso = null
+                                        escopo.launch {
+                                            try {
+                                                val apagados = repositorio.apagarPerfisAleatorios()
+                                                val rest = perfisDemonstracao.firstOrNull()
+                                                perfilEscolhidoId = rest?.id ?: "1"
+                                                if (rest != null) {
+                                                    telemovel = rest.telemovel.replace("+351 ", "")
+                                                    nif = rest.nif
+                                                }
+                                                mensagemSucesso = if (apagados > 0) "$apagados perfis aleatórios apagados com sucesso." else "Nenhum perfil aleatório para apagar."
+                                            } catch (e: Exception) {
+                                                mensagemSucesso = "Erro ao apagar perfis: ${e.localizedMessage}"
+                                            } finally {
+                                                aApagarPerfis = false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFFDC2626),
+                                    ),
+                                    border = BorderStroke(1.2.dp, Color(0xFFFCA5A5)),
+                                    enabled = !aApagarPerfis && !aCriarPerfil,
+                                ) {
+                                    if (aApagarPerfis) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = Color(0xFFDC2626),
+                                            strokeWidth = 2.dp,
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("A apagar perfis...", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                    } else {
+                                        Icon(
+                                            Icons.Rounded.DeleteSweep,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Color(0xFFDC2626),
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Apagar Perfis Aleatórios", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
                                 }
                             }
 

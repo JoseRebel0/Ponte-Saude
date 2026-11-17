@@ -98,6 +98,7 @@ fun MedicamentoEntity.paraModelo(): Medicamento {
         cor = cor,
         ativo = ativo,
         fotografia = fotografia?.takeIf { it.isNotBlank() && it != "null" },
+        laboratorio = laboratorio.orEmpty(),
     )
 }
 
@@ -112,6 +113,7 @@ fun Medicamento.paraEntidade(idPerfil: String, pendente: Boolean = false): Medic
         cor,
         ativo,
         fotografia ?: "",
+        laboratorio,
         pendente,
     )
 }
