@@ -24,6 +24,7 @@ import pt.ulsbe.pontesaude.data.local.serializarListaString
 import pt.ulsbe.pontesaude.data.local.serializarVouchers
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
 import pt.ulsbe.pontesaude.data.remote.DadosPerfilRemoto
+import pt.ulsbe.pontesaude.data.remote.IntegracaoIA
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -49,6 +50,7 @@ class RepositorioApp(context: Context) {
 
     // Fonte de dados remota (Cliente de comunicação Firestore / API)
     private val clienteFirestore = ClienteFirestore()
+    private val integracaoIa = IntegracaoIA()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val listaMedicamentos = mutableStateMapOf<String, List<Medicamento>>()
@@ -406,6 +408,18 @@ class RepositorioApp(context: Context) {
         }
     }
 
+    /**
+     * Atualiza ou remove a fotografia da embalagem de um medicamento.
+     * Persiste localmente no Room SQLite (e ficheiro interno) e efetua upload para a Cloud Firestore (campo "fotografia").
+     * Se estiver offline, marca como pendente para sincronizar automaticamente assim que voltar a ligação.
+     */
+    fun atualizarFotoMedicamento(perfil: Perfil, idMedicamento: Long, novaFotoBase64: String?) {
+        val listaAtual = medicamentos(perfil)
+        val medAntigo = listaAtual.find { it.id == idMedicamento } ?: return
+        val medAtualizado = medAntigo.copy(fotografia = novaFotoBase64)
+        atualizarMedicamento(perfil, medAtualizado)
+    }
+
     fun apagarMedicamento(perfil: Perfil, id: Long) {
         atualizarMedicamentos(perfil, medicamentos(perfil).filterNot { it.id == id })
         scope.launch(Dispatchers.IO) {
@@ -554,6 +568,23 @@ class RepositorioApp(context: Context) {
         }
     }
 
+    /**
+     * Traduz uma dúvida ou termo clínico utilizando a Gemini Developer API via Firebase AI.
+     * Retorna Result com a explicação ou falha.
+     */
+    suspend fun traduzirTermoComIa(termo: String): Result<String> {
+        return integracaoIa.gerarExplicacao(termo)
+    }
+
+    /**
+     * Explica para que serve um medicamento utilizando a Gemini Developer API via Firebase AI.
+     */
+    suspend fun explicarMedicamentoComIa(nomeMedicamento: String): Result<String> {
+        return integracaoIa.explicarMedicamento(nomeMedicamento)
+    }
+
+
+
     // ==========================================
     // PESSOAS CUIDADAS
     // ==========================================
@@ -587,8 +618,8 @@ class RepositorioApp(context: Context) {
                 Consulta(2, "02", "Dez", "Análises de Rotina", "ULSBE · Hospital", "Exame", true),
             ),
             medicamentos = listOf(
-                Medicamento(System.currentTimeMillis(), "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true),
-                Medicamento(System.currentTimeMillis() + 10, "Vitamina B12", "Suplemento", "cianocobalamina", "12:00", 0xFF059669, true),
+                Medicamento(System.currentTimeMillis(), "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true, laboratorio = "Bial"),
+                Medicamento(System.currentTimeMillis() + 10, "Vitamina B12", "Suplemento", "cianocobalamina", "12:00", 0xFF059669, true, laboratorio = "Labesfal"),
             ),
             outrosProdutos = emptyList(),
             notas = listOf(Nota("Processo clínico vinculado com sucesso por SMS.", "Cuidador")),
@@ -957,81 +988,9 @@ class RepositorioApp(context: Context) {
     }
 
     suspend fun criarPerfilAleatorio(): Perfil = withContext(Dispatchers.IO) {
-        val nomesPossiveis = listOf(
-            Pair("Manuel António Ferreira", "Manuel"),
-            Pair("Ana Sofia Costa", "Ana"),
-            Pair("Carlos Alberto Martins", "Carlos"),
-            Pair("Teresa Maria Pinho", "Teresa"),
-            Pair("João Pedro Ribeiro", "João"),
-            Pair("Maria da Conceição Sousa", "Maria"),
-            Pair("Rui Jorge Barbosa", "Rui"),
-            Pair("Helena Isabel Santos", "Helena"),
-            Pair("Fernando Miguel Silva", "Fernando"),
-            Pair("Rosa Maria Oliveira", "Rosa"),
-        )
-        val tiposSangue = listOf("A+", "A-", "B+", "B-", "O+", "O-", "AB+")
-        val alergiasPossiveis = listOf(
-            "Sem alergias conhecidas",
-            "Penicilina",
-            "Aspirina / AINEs",
-            "Iodo",
-            "Sem alergias conhecidas",
-        )
-
-        val random = java.util.Random()
-        val nomePar = nomesPossiveis[random.nextInt(nomesPossiveis.size)]
-        val relacao = "Utente"
-        val tipoSangue = tiposSangue[random.nextInt(tiposSangue.size)]
-        val alergias = alergiasPossiveis[random.nextInt(alergiasPossiveis.size)]
-
         val todosIds = todosOsPerfis.mapNotNull { it.id.toLongOrNull() }
         val proximoId = ((todosIds.maxOrNull() ?: 0L) + 1).toString()
-
-        val anoNasc = 1940 + random.nextInt(45)
-        val mesNasc = (1 + random.nextInt(12)).toString().padStart(2, '0')
-        val diaNasc = (1 + random.nextInt(28)).toString().padStart(2, '0')
-        val dataNasc = "$diaNasc/$mesNasc/$anoNasc"
-
-        val numUtente = "${100 + random.nextInt(900)} ${100 + random.nextInt(900)} ${100 + random.nextInt(900)}"
-        val nif = "${200 + random.nextInt(99)} ${100 + random.nextInt(900)} ${100 + random.nextInt(900)}"
-        val tel = "+351 91${random.nextInt(10)} ${100 + random.nextInt(900)} ${100 + random.nextInt(900)}"
-
-        val agora = System.currentTimeMillis()
-        val medicamentosExemplo = listOf(
-            Medicamento(agora, "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true),
-            Medicamento(agora + 10, "Omeprazol 20 mg", "Proteção do estômago", "omeprazol", "08:30", 0xFFE5484D, true),
-            Medicamento(agora + 20, "Atorvastatina 20 mg", "Controlo do colesterol", "atorvastatina", "21:00", 0xFFF5D90A, true),
-        )
-
-        val consultasExemplo = listOf(
-            Consulta(1, "18", "Nov", "Medicina Geral e Familiar", "ULSBE · Centro de Saúde", "Consulta"),
-            Consulta(2, "04", "Dez", "Análises Clínicas de Rotina", "ULSBE · Hospital", "Exame", true),
-        )
-
-        val notasExemplo = listOf(
-            Nota("Processo clínico criado automaticamente no ambiente de testes da ULSBE.", "Sistema ULSBE"),
-            Nota("Confirmar próxima toma e esclarecer dúvidas com o médico assistente.", nomePar.second),
-        )
-
-        val novo = Perfil(
-            id = proximoId,
-            nome = nomePar.first,
-            nomeCurto = nomePar.second,
-            relacao = relacao,
-            iniciais = nomePar.first.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "UT" },
-            tipoSanguineo = tipoSangue,
-            alergias = alergias,
-            consultas = consultasExemplo,
-            medicamentos = medicamentosExemplo,
-            outrosProdutos = listOf("Suplemento Vitamina C"),
-            notas = notasExemplo,
-            nif = nif,
-            numeroUtente = numUtente,
-            cartaoCidadao = "00000000 0 ZZ0",
-            dataNascimento = dataNasc,
-            telemovel = tel,
-            email = "${nomePar.second.lowercase()}@exemplo.pt",
-        )
+        val novo = GeradorDadosPortugal.gerarPerfilAleatorio(proximoId)
 
         // 1. Gravar no Firestore com subcoleções completas
         clienteFirestore.salvarPerfilCompleto(
@@ -1046,24 +1005,108 @@ class RepositorioApp(context: Context) {
         // 2. Gravar no Room
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), false)
         dbLocal.perfilDao().inserirOuAtualizar(pEnt)
-        val medsEnt = medicamentosExemplo.map { it.paraEntidade(novo.id, false) }
+        val medsEnt = novo.medicamentos.map { it.paraEntidade(novo.id, false) }
         dbLocal.medicamentoDao().inserirVarios(medsEnt)
-        val consEnt = consultasExemplo.map { it.paraEntidade(novo.id, emptyList(), emptyList(), false) }
+        val consEnt = novo.consultas.map { it.paraEntidade(novo.id, emptyList(), emptyList(), false) }
         dbLocal.consultaDao().inserirVarios(consEnt)
-        notasExemplo.forEach { n ->
+        novo.notas.forEach { n ->
             dbLocal.notaDao().inserir(NotaEntity(0, novo.id, n.texto, n.autor, false))
         }
 
         withContext(Dispatchers.Main) {
             todosOsPerfis.add(novo)
-            listaMedicamentos[novo.id] = medicamentosExemplo
-            listaConsultas[novo.id] = consultasExemplo
-            listaNotas[novo.id] = notasExemplo
-            listaProdutos[novo.id] = listOf("Suplemento Vitamina C")
+            listaMedicamentos[novo.id] = novo.medicamentos
+            listaConsultas[novo.id] = novo.consultas
+            listaNotas[novo.id] = novo.notas
+            listaProdutos[novo.id] = novo.outrosProdutos
             atualizarListaPessoasCuidadas()
         }
 
+        val gerados = preferencias.getStringSet("perfis_gerados_aleatorios", emptySet()).orEmpty().toMutableSet()
+        gerados.add(novo.id)
+        preferencias.edit().putStringSet("perfis_gerados_aleatorios", gerados).apply()
+
         novo
+    }
+
+    /**
+     * Apaga um perfil específico imediatamente (localmente no Room e na nuvem no Firestore)
+     * sem necessidade de confirmação.
+     */
+    suspend fun apagarPerfil(idPerfil: String) = withContext(Dispatchers.IO) {
+        if (estaOnline) {
+            runCatching { clienteFirestore.apagarPerfil(idPerfil) }
+        }
+
+        dbLocal.perfilDao().apagar(idPerfil)
+        dbLocal.medicamentoDao().apagarPorPerfil(idPerfil)
+        dbLocal.consultaDao().apagarPorPerfil(idPerfil)
+        dbLocal.notaDao().apagarPorPerfil(idPerfil)
+
+        val gerados = preferencias.getStringSet("perfis_gerados_aleatorios", emptySet()).orEmpty().toMutableSet()
+        gerados.remove(idPerfil)
+        preferencias.edit().putStringSet("perfis_gerados_aleatorios", gerados).apply()
+
+        withContext(Dispatchers.Main) {
+            todosOsPerfis.removeAll { it.id == idPerfil }
+            listaMedicamentos.remove(idPerfil)
+            listaConsultas.remove(idPerfil)
+            listaNotas.remove(idPerfil)
+            listaProdutos.remove(idPerfil)
+            atualizarListaPessoasCuidadas()
+
+            if (utenteSessaoId == idPerfil) {
+                utenteSessaoId = todosOsPerfis.firstOrNull()?.id ?: "1"
+                preferencias.edit().putString("cmd_utente_id", utenteSessaoId).apply()
+            }
+            carregarDadosPerfil(perfilAtivo.id)
+        }
+    }
+
+    /**
+     * Apaga todos os perfis gerados aleatoriamente de imediato (Room + Firestore),
+     * sem confirmação prévia, devolvendo o número de perfis removidos.
+     */
+    suspend fun apagarPerfisAleatorios(): Int = withContext(Dispatchers.IO) {
+        val idsGerados = preferencias.getStringSet("perfis_gerados_aleatorios", emptySet()).orEmpty()
+        val perfisAApagar = todosOsPerfis.filter { p ->
+            p.id in idsGerados ||
+            p.email.endsWith("@exemplo.pt") ||
+            p.notas.any { it.texto.contains("ambiente de testes") } ||
+            (todosOsPerfis.size > 1 && p.id != "1")
+        }
+
+        val ids = perfisAApagar.map { it.id }
+        for (id in ids) {
+            if (estaOnline) {
+                runCatching { clienteFirestore.apagarPerfil(id) }
+            }
+            dbLocal.perfilDao().apagar(id)
+            dbLocal.medicamentoDao().apagarPorPerfil(id)
+            dbLocal.consultaDao().apagarPorPerfil(id)
+            dbLocal.notaDao().apagarPorPerfil(id)
+        }
+
+        preferencias.edit().remove("perfis_gerados_aleatorios").apply()
+
+        withContext(Dispatchers.Main) {
+            todosOsPerfis.removeAll { it.id in ids }
+            ids.forEach { id ->
+                listaMedicamentos.remove(id)
+                listaConsultas.remove(id)
+                listaNotas.remove(id)
+                listaProdutos.remove(id)
+            }
+            atualizarListaPessoasCuidadas()
+
+            if (utenteSessaoId in ids) {
+                utenteSessaoId = todosOsPerfis.firstOrNull()?.id ?: "1"
+                preferencias.edit().putString("cmd_utente_id", utenteSessaoId).apply()
+            }
+            carregarDadosPerfil(perfilAtivo.id)
+        }
+
+        ids.size
     }
 
     private fun salvarPerfilNoRoom(perfil: Perfil, pendente: Boolean = false) {
@@ -1123,7 +1166,8 @@ class RepositorioApp(context: Context) {
                         .put("time", it.hora)
                         .put("color", it.cor)
                         .put("enabled", it.ativo)
-                        .put("photo", it.fotografia ?: JSONObject.NULL),
+                        .put("photo", it.fotografia ?: JSONObject.NULL)
+                        .put("laboratory", it.laboratorio),
                 )
             }
         }
@@ -1145,6 +1189,7 @@ class RepositorioApp(context: Context) {
                 cor = item.getLong("color"),
                 ativo = item.getBoolean("enabled"),
                 fotografia = if (item.isNull("photo")) null else item.optString("photo").takeUnless { it.isBlank() || it == "null" },
+                laboratorio = item.optString("laboratory", item.optString("laboratorio", "")),
             )
         }
     }.getOrDefault(perfil.medicamentos)
@@ -1252,8 +1297,8 @@ class RepositorioApp(context: Context) {
                             Consulta(2, "02", "Dez", "Análises de Rotina", "ULSBE · Hospital", "Exame", true),
                         ),
                         medicamentos = listOf(
-                            Medicamento(System.currentTimeMillis() + i, "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true),
-                            Medicamento(System.currentTimeMillis() + 100 + i, "Vitamina B12", "Suplemento", "cianocobalamina", "12:00", 0xFF059669, true),
+                            Medicamento(System.currentTimeMillis() + i, "Paracetamol 1000 mg", "Dores / Febre", "paracetamol", "08:00", 0xFF3E63DD, true, laboratorio = "Generis"),
+                            Medicamento(System.currentTimeMillis() + 100 + i, "Vitamina B12", "Suplemento", "cianocobalamina", "12:00", 0xFF059669, true, laboratorio = "Tecnimede"),
                         ),
                         outrosProdutos = emptyList(),
                         notas = listOf(Nota("Processo clínico vinculado com sucesso por SMS.", "Cuidador")),

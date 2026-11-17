@@ -16,6 +16,7 @@ class ApiMedicacaoRemoto(
 
     /**
      * Guarda ou atualiza a informação de um medicamento na subcoleção do perfil no Firestore.
+     * Grava a fotografia da caixa no campo "fotografia".
      */
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) = withContext(Dispatchers.IO) {
         val dto = MedicamentoDtoRemoto(
@@ -27,12 +28,28 @@ class ApiMedicacaoRemoto(
             cor = med.cor,
             ativo = med.ativo,
             fotografia = med.fotografia ?: "",
+            laboratorio = med.laboratorio,
         )
         db.collection("perfis")
             .document(idPerfil)
             .collection("medicamentos")
             .document(med.id.toString())
             .set(dto, SetOptions.merge())
+            .await()
+    }
+
+    /**
+     * Atualiza diretamente o campo "fotografia" do medicamento na Cloud Firestore.
+     */
+    suspend fun atualizarImagemMedicamento(idPerfil: String, idMedicamento: Long, fotografiaBase64: String) = withContext(Dispatchers.IO) {
+        val campos = mapOf(
+            "fotografia" to fotografiaBase64,
+        )
+        db.collection("perfis")
+            .document(idPerfil)
+            .collection("medicamentos")
+            .document(idMedicamento.toString())
+            .set(campos, SetOptions.merge())
             .await()
     }
 

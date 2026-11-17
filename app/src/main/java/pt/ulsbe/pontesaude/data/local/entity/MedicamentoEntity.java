@@ -1,6 +1,7 @@
 package pt.ulsbe.pontesaude.data.local.entity;
 
 import androidx.room.Entity;
+import androidx.room.Ignore;
 import androidx.room.PrimaryKey;
 
 /**
@@ -18,11 +19,12 @@ public class MedicamentoEntity {
     public long cor;
     public boolean ativo;
     public String fotografia;
+    public String laboratorio;
     public boolean pendenteSincronizacao;
 
     public MedicamentoEntity(long id, String idPerfil, String nome, String finalidade,
                              String principioAtivo, String hora, long cor, boolean ativo,
-                             String fotografia, boolean pendenteSincronizacao) {
+                             String fotografia, String laboratorio, boolean pendenteSincronizacao) {
         this.id = id;
         this.idPerfil = idPerfil;
         this.nome = nome;
@@ -32,6 +34,14 @@ public class MedicamentoEntity {
         this.cor = cor;
         this.ativo = ativo;
         this.fotografia = fotografia;
+        this.laboratorio = laboratorio != null ? laboratorio : "";
         this.pendenteSincronizacao = pendenteSincronizacao;
+    }
+
+    @Ignore
+    public MedicamentoEntity(long id, String idPerfil, String nome, String finalidade,
+                             String principioAtivo, String hora, long cor, boolean ativo,
+                             String fotografia, boolean pendenteSincronizacao) {
+        this(id, idPerfil, nome, finalidade, principioAtivo, hora, cor, ativo, fotografia, "", pendenteSincronizacao);
     }
 }

@@ -78,6 +78,8 @@ class ClienteFirestore(
 
     suspend fun limparTodasAssociacoesFirestore() = perfis.limparTodasAssociacoesFirestore()
 
+    suspend fun apagarPerfil(idPerfil: String) = perfis.apagarPerfil(idPerfil)
+
     fun iniciarEscutaPerfisEmTempoReal(aoAlterar: () -> Unit) = perfis.iniciarEscutaPerfisEmTempoReal(aoAlterar)
 
     fun pararEscutaPerfis() = perfis.pararEscutaPerfis()
@@ -86,6 +88,9 @@ class ClienteFirestore(
 
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) =
         medicacao.guardarMedicamento(idPerfil, med)
+
+    suspend fun atualizarImagemMedicamento(idPerfil: String, idMedicamento: Long, imagemBase64: String) =
+        medicacao.atualizarImagemMedicamento(idPerfil, idMedicamento, imagemBase64)
 
     suspend fun removerMedicamento(idPerfil: String, idMedicamento: Long) =
         medicacao.removerMedicamento(idPerfil, idMedicamento)

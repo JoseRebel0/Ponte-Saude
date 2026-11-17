@@ -1,6 +1,7 @@
 package pt.ulsbe.pontesaude.ui.screens
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,15 +27,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddComment
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.SupervisorAccount
+import androidx.compose.material.icons.rounded.VpnKey
+import androidx.compose.material.icons.rounded.WifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -54,8 +63,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,6 +87,42 @@ import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
+data class ItemHistoricoIa(
+    val pergunta: String,
+    val resposta: String,
+    val dataHora: String,
+)
+
+private fun carregarHistoricoIa(context: Context, idPerfil: String): List<ItemHistoricoIa> {
+    val prefs = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
+    val jsonString = prefs.getString("historico_ia_$idPerfil", null) ?: return emptyList()
+    return runCatching {
+        val array = org.json.JSONArray(jsonString)
+        (0 until array.length()).map { i ->
+            val obj = array.getJSONObject(i)
+            ItemHistoricoIa(
+                pergunta = obj.getString("p"),
+                resposta = obj.getString("r"),
+                dataHora = obj.getString("d"),
+            )
+        }
+    }.getOrDefault(emptyList())
+}
+
+private fun guardarHistoricoIa(context: Context, idPerfil: String, lista: List<ItemHistoricoIa>) {
+    val prefs = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
+    val array = org.json.JSONArray()
+    lista.take(20).forEach { item ->
+        val obj = org.json.JSONObject().apply {
+            put("p", item.pergunta)
+            put("r", item.resposta)
+            put("d", item.dataHora)
+        }
+        array.put(obj)
+    }
+    prefs.edit().putString("historico_ia_$idPerfil", array.toString()).apply()
+}
+
 /**
  * Ecrã de Notas e Apontamentos com o Tradutor Médico e Assistente IA no topo,
  * seguido do bloco de registo e gestão de notas clínicas do utente.
@@ -82,13 +130,45 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosDispositivo) {
+    val contexto = LocalContext.current
     var consultaTradutor by remember { mutableStateOf("") }
     var explicacaoTradutor by remember { mutableStateOf<String?>(null) }
+    var aProcessarIa by remember { mutableStateOf(false) }
+    var avisoSemInternet by remember { mutableStateOf(false) }
+    var mensagemErroIa by remember { mutableStateOf<String?>(null) }
+    var historicoIa by remember(perfil.id) { mutableStateOf(carregarHistoricoIa(contexto, perfil.id)) }
+    var mostrarHistoricoIa by remember { mutableStateOf(false) }
     var rascunhoNota by remember(perfil.id) { mutableStateOf("") }
     var avisoNota by remember { mutableStateOf("") }
     var aAtualizar by remember { mutableStateOf(false) }
     val estadoLista = rememberLazyListState()
     val escopo = rememberCoroutineScope()
+
+    fun traduzirConsulta(termo: String) {
+        if (termo.isBlank()) return
+        if (!plataforma.temConexaoInternet()) {
+            avisoSemInternet = true
+            return
+        }
+        avisoSemInternet = false
+        mensagemErroIa = null
+        aProcessarIa = true
+        escopo.launch {
+            val resultado = repositorio.traduzirTermoComIa(termo)
+            resultado.onSuccess { explicacao ->
+                explicacaoTradutor = explicacao
+                val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
+                val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
+                historicoIa = listaAtualizada
+                guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
+            }.onFailure { erro ->
+                android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
+                mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
+            }
+            aProcessarIa = false
+        }
+    }
 
     // Ditado por voz para o Tradutor Médico
     val lancadorVozTradutor = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { resultado ->
@@ -96,9 +176,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
             val falado = resultado.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
             if (falado.isNotBlank()) {
                 consultaTradutor = falado
-                val res = pesquisarGlossario(falado)
-                explicacaoTradutor = res
-                plataforma.falar(res)
+                traduzirConsulta(falado)
             }
         }
     }
@@ -186,13 +264,13 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(42.dp)
+                                        .size(46.dp)
                                         .clip(CircleShape)
                                         .background(Marca),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
-                                        Icons.Rounded.SmartToy,
+                                        Icons.Rounded.AutoAwesome,
                                         contentDescription = null,
                                         tint = MarcaClaro,
                                         modifier = Modifier.size(24.dp),
@@ -201,22 +279,59 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "Tradutor Médico & Assistente IA",
+                                        "Tradutor Clínico & Assistente IA",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                     )
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        "Linguagem simples para termos clínicos e dúvidas dos utentes",
+                                        "Apoio à literacia em saúde · ULS Barcelos / Esposende",
                                         color = Atenuado,
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
+                                IconButton(
+                                    onClick = { mostrarHistoricoIa = true },
+                                    modifier = Modifier.size(38.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.History,
+                                        contentDescription = "Ver histórico de perguntas",
+                                        tint = MarcaMedio,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(14.dp))
+
+                            // AVISO DE PRIVACIDADE E DADOS PESSOAIS (RGPD)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Superficie2)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Lock,
+                                    contentDescription = null,
+                                    tint = MarcaMedio,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "Privacidade e Proteção de Dados: O assistente não acede ao seu processo clínico nem guarda dados pessoais sensíveis (NIF, nº SNS ou morada). As respostas são puramente informativas.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Atenuado,
+                                    lineHeight = 16.sp,
+                                )
                             }
 
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "Escreva ou dite o termo médico que ouviu ou a sua questão. O assistente explica em linguagem clara e descomplicada (preparado para ligação futura a API de IA).",
+                                "Escreva ou dite o termo médico, exame ou receita para receber uma explicação clara e descomplicada.",
                                 color = Atenuado,
                                 style = MaterialTheme.typography.bodySmall,
                                 lineHeight = 18.sp,
@@ -233,6 +348,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                     onValueChange = { consultaTradutor = it },
                                     modifier = Modifier.weight(1f),
                                     placeholder = { Text("Ex: jejum, hipertensão, anticoagulante…") },
+                                    shape = RoundedCornerShape(14.dp),
                                     singleLine = true,
                                 )
                                 FilledIconButton(
@@ -251,20 +367,47 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                 ) { Icon(Icons.Rounded.Mic, "Ditar termo por voz") }
                             }
 
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(12.dp))
                             Button(
-                                onClick = {
-                                    val res = pesquisarGlossario(consultaTradutor)
-                                    explicacaoTradutor = res
-                                },
+                                onClick = { traduzirConsulta(consultaTradutor) },
+                                enabled = !aProcessarIa && consultaTradutor.isNotBlank(),
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
                             ) {
-                                Text("Explicar de forma simples", fontWeight = FontWeight.SemiBold)
+                                if (aProcessarIa) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("A analisar termo clínico…", fontWeight = FontWeight.SemiBold)
+                                } else {
+                                    Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Explicar de forma simples", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            if (!plataforma.temConexaoInternet()) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                ) {
+                                    Icon(Icons.Rounded.WifiOff, null, tint = Atenuado, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Ligue a internet para utilizar o Tradutor IA.",
+                                        color = Atenuado,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             }
 
                             explicacaoTradutor?.let { texto ->
-                                Spacer(Modifier.height(14.dp))
+                                Spacer(Modifier.height(16.dp))
                                 Column(
                                     Modifier
                                         .fillMaxWidth()
@@ -272,8 +415,31 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                         .background(Marca)
                                         .padding(16.dp),
                                 ) {
-                                    Text(texto, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
-                                    Spacer(Modifier.height(12.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.SmartToy,
+                                            contentDescription = null,
+                                            tint = MarcaClaro,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Explicação Clínica Descomplicada",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MarcaClaro,
+                                        )
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        texto,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        lineHeight = 22.sp,
+                                    )
+                                    Spacer(Modifier.height(14.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -293,6 +459,13 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                             Text("Guardar nas Notas", style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(
+                                        "Aviso: Informação gerada por Inteligência Artificial para apoio à literacia em saúde. Não substitui consulta médica.",
+                                        color = Atenuado,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        lineHeight = 15.sp,
+                                    )
                                 }
                             }
                         }
@@ -401,6 +574,213 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                 }
             }
         }
+    }
+
+    if (avisoSemInternet) {
+        AlertDialog(
+            onDismissRequest = { avisoSemInternet = false },
+            icon = {
+                Icon(
+                    Icons.Rounded.WifiOff,
+                    contentDescription = null,
+                    tint = Color(0xFFDC2626),
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    "Sem Ligação à Internet",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Text(
+                    "O Tradutor com Inteligência Artificial necessita de ligação à internet para responder às suas dúvidas. Por favor, ligue o Wi-Fi ou os dados móveis no seu telemóvel.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { avisoSemInternet = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+                ) {
+                    Text("Compreendi")
+                }
+            },
+        )
+    }
+
+    if (mensagemErroIa != null) {
+        AlertDialog(
+            onDismissRequest = { mensagemErroIa = null },
+            icon = {
+                Icon(
+                    Icons.Rounded.SmartToy,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    "Resposta do Serviço de IA",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Text(
+                    mensagemErroIa ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { mensagemErroIa = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+                ) {
+                    Text("Fechar")
+                }
+            },
+        )
+    }
+
+    if (mostrarHistoricoIa) {
+        AlertDialog(
+            onDismissRequest = { mostrarHistoricoIa = false },
+            icon = {
+                Icon(
+                    Icons.Rounded.History,
+                    contentDescription = null,
+                    tint = MarcaMedio,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    "Histórico de Perguntas",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Superficie2)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = Atenuado,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Guardado apenas localmente no telemóvel.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Atenuado,
+                        )
+                    }
+
+                    if (historicoIa.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "Ainda não fez perguntas ao assistente.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Atenuado,
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 350.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(historicoIa.size) { index ->
+                                val item = historicoIa[index]
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Superficie2)
+                                        .clickable {
+                                            consultaTradutor = item.pergunta
+                                            explicacaoTradutor = item.resposta
+                                            mostrarHistoricoIa = false
+                                        }
+                                        .padding(12.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = item.pergunta,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            text = item.dataHora,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Atenuado,
+                                        )
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = item.resposta,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Atenuado,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "Toque para abrir e reler",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MarcaMedio,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { mostrarHistoricoIa = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+                ) {
+                    Text("Fechar")
+                }
+            },
+            dismissButton = if (historicoIa.isNotEmpty()) {
+                {
+                    TextButton(
+                        onClick = {
+                            historicoIa = emptyList()
+                            guardarHistoricoIa(contexto, perfil.id, emptyList())
+                        },
+                    ) {
+                        Text("Limpar", color = Color(0xFFDC2626))
+                    }
+                }
+            } else null,
+        )
     }
 }
 

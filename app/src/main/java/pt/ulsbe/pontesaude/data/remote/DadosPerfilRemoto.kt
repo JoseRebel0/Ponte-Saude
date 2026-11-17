@@ -55,6 +55,7 @@ data class MedicamentoDtoRemoto(
     val cor: Long = 0L,
     val ativo: Boolean = true,
     val fotografia: String = "",
+    val laboratorio: String = "",
 )
 
 data class ConsultaDtoRemoto(

@@ -1,12 +1,15 @@
 package pt.ulsbe.pontesaude.ui.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -16,6 +19,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,23 +38,31 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddAPhoto
 import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.HealthAndSafety
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Medication
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -85,6 +97,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.data.ProcessadorImagem
 import pt.ulsbe.pontesaude.data.RepositorioApp
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
@@ -94,6 +107,7 @@ import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
+import pt.ulsbe.pontesaude.ui.theme.MarcaProfundo
 import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 import java.io.ByteArrayOutputStream
@@ -128,6 +142,8 @@ fun formatTimeForSpeech(time: String): String = formatarHoraParaFala(time)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosDispositivo) {
+    val contexto = LocalContext.current
+    val temNet = plataforma.temConexaoInternet()
     val medicamentos = repositorio.medicamentos(perfil)
     var aAtualizar by remember { mutableStateOf(false) }
     val escopo = rememberCoroutineScope()
@@ -136,12 +152,39 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
     var medicamentoEmEdicao by remember { mutableStateOf<Medicamento?>(null) }
     var pendenteApagar by remember { mutableStateOf<Medicamento?>(null) }
     var mensagemAlarme by remember { mutableStateOf<String?>(null) }
-    var fotoAmpliada by remember { mutableStateOf<Bitmap?>(null) }
+    var medicamentoParaFoto by remember { mutableStateOf<Medicamento?>(null) }
+    var medicamentoParaVerFoto by remember { mutableStateOf<Medicamento?>(null) }
+    var confirmarRemoverFotoMed by remember { mutableStateOf<Medicamento?>(null) }
     var filtroHorario by remember { mutableStateOf("Todos") } // "Todos", "Ativos", "Manhã", "Tarde", "Noite"
     var rascunhoProduto by remember { mutableStateOf("") }
     var pdfGeradoUri by remember { mutableStateOf<Uri?>(null) }
     var pdfNomeFicheiro by remember { mutableStateOf("") }
     var mostrarDialogoPdf by remember { mutableStateOf(false) }
+    var medParaExplicarIa by remember { mutableStateOf<Medicamento?>(null) }
+    var textoExplicacaoIa by remember { mutableStateOf<String?>(null) }
+    var aCarregarExplicacaoIa by remember { mutableStateOf(false) }
+    var erroExplicacaoIa by remember { mutableStateOf<String?>(null) }
+    var avisoSemInternetMedicacao by remember { mutableStateOf(false) }
+
+    fun pedirExplicacaoIa(med: Medicamento) {
+        if (!plataforma.temConexaoInternet()) {
+            avisoSemInternetMedicacao = true
+            return
+        }
+        medParaExplicarIa = med
+        textoExplicacaoIa = null
+        erroExplicacaoIa = null
+        aCarregarExplicacaoIa = true
+        escopo.launch {
+            val resultado = repositorio.explicarMedicamentoComIa(med.nome)
+            resultado.onSuccess { explicacao ->
+                textoExplicacaoIa = explicacao
+            }.onFailure { erro ->
+                erroExplicacaoIa = erro.localizedMessage ?: erro.message.orEmpty()
+            }
+            aCarregarExplicacaoIa = false
+        }
+    }
 
     val duplicados = medicamentos
         .filter { medicamento ->
@@ -518,7 +561,9 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                     }
                 } else {
                     items(medicamentosFiltrados, key = { it.id }) { medicamento ->
-                        val bitmap = remember(medicamento.fotografia) { medicamento.fotografia?.descodificarBitmap() }
+                        val bitmap = remember(medicamento.fotografia) {
+                            ProcessadorImagem.descodificarBitmap(contexto, medicamento.id, medicamento.fotografia)
+                        }
                         val corPill = Color(medicamento.cor)
 
                         Card(
@@ -544,14 +589,20 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    // FOTOGRAFIA OU ÍCONE
+                                    // FOTOGRAFIA OU ÍCONE DA EMBALAGEM
                                     Box(
                                         modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(corPill.copy(alpha = 0.12f))
-                                            .border(1.dp, corPill.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-                                            .clickable(enabled = bitmap != null) { fotoAmpliada = bitmap },
+                                            .size(76.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(if (bitmap != null) Color(0xFFF1F5F9) else corPill.copy(alpha = 0.12f))
+                                            .border(1.5.dp, if (bitmap != null) Color(0xFFCBD5E1) else corPill.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                                            .clickable {
+                                                if (bitmap != null) {
+                                                    medicamentoParaVerFoto = medicamento
+                                                } else {
+                                                    medicamentoParaFoto = medicamento
+                                                }
+                                            },
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (bitmap != null) {
@@ -561,13 +612,41 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                                 modifier = Modifier.fillMaxSize(),
                                                 contentScale = ContentScale.Crop,
                                             )
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .padding(3.dp)
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color.Black.copy(alpha = 0.55f)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Icon(
+                                                    Icons.Rounded.Search,
+                                                    contentDescription = "Ver foto",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(12.dp),
+                                                )
+                                            }
                                         } else {
-                                            Icon(
-                                                Icons.Rounded.Medication,
-                                                contentDescription = null,
-                                                tint = corPill,
-                                                modifier = Modifier.size(28.dp),
-                                            )
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center,
+                                            ) {
+                                                Icon(
+                                                    Icons.Rounded.Medication,
+                                                    contentDescription = null,
+                                                    tint = corPill,
+                                                    modifier = Modifier.size(32.dp),
+                                                )
+                                                Spacer(Modifier.height(2.dp))
+                                                Icon(
+                                                    Icons.Rounded.AddAPhoto,
+                                                    contentDescription = "Adicionar foto",
+                                                    tint = corPill.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(15.dp),
+                                                )
+                                            }
                                         }
                                     }
 
@@ -587,6 +666,15 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                                 text = "Substância: ${medicamento.principioAtivo}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = Atenuado,
+                                            )
+                                        }
+                                        if (medicamento.laboratorio.isNotBlank()) {
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                text = "Laboratório: ${medicamento.laboratorio}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MarcaMedio,
+                                                fontWeight = FontWeight.Medium,
                                             )
                                         }
                                     }
@@ -632,7 +720,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                     }
                                 }
 
-                                // LINHA INTERMÉDIA: Indicação clínica + Frequência + Chips de Horários
+                                // LINHA INTERMÉDIA: Indicação clínica + Frequência + Badge Foto + Chips de Horários
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -708,6 +796,60 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                             }
                                         }
                                     }
+                                }
+
+                                // BOTÃO ADICIONAR FOTO DA CAIXA (quando ainda não tem)
+                                if (bitmap == null) {
+                                    OutlinedButton(
+                                        onClick = { medicamentoParaFoto = medicamento },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MarcaMedio,
+                                        ),
+                                        border = BorderStroke(1.dp, MarcaMedio.copy(alpha = 0.35f)),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.AddAPhoto,
+                                            contentDescription = null,
+                                            tint = MarcaMedio,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Adicionar foto da caixa",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                }
+
+                                // BOTÃO EXPLICAR COM IA
+                                Button(
+                                    onClick = { pedirExplicacaoIa(medicamento) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp, bottom = 4.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MarcaMedio.copy(alpha = 0.12f),
+                                        contentColor = MarcaProfundo,
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MarcaMedio,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Para que serve este medicamento? (IA)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
                                 }
 
                                 // LINHA INFERIOR: Ouvir + Editar + Eliminar
@@ -1134,30 +1276,64 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
         )
     }
 
-    // DIÁLOGO VISUALIZAÇÃO AMPLIADA DA FOTOGRAFIA DA EMBALAGEM
-    fotoAmpliada?.let { bmp ->
+    // DIÁLOGO DE VISUALIZAÇÃO AMPLIADA DA FOTOGRAFIA DA EMBALAGEM
+    medicamentoParaVerFoto?.let { med ->
+        DialogoVisualizadorFotoMedicamento(
+            medicamento = med,
+            aoDispensar = { medicamentoParaVerFoto = null },
+            aoPedirAlterarFoto = {
+                val alvo = med
+                medicamentoParaVerFoto = null
+                medicamentoParaFoto = alvo
+            },
+            aoPedirRemoverFoto = {
+                confirmarRemoverFotoMed = med
+            },
+            temNet = temNet,
+        )
+    }
+
+    // DIÁLOGO DE SELEÇÃO DE FOTOGRAFIA (CÂMARA OU GALERIA/FICHEIROS)
+    medicamentoParaFoto?.let { med ->
+        DialogoSelecionarFotoMedicamento(
+            nomeMedicamento = med.nome,
+            idMedicamento = med.id,
+            aoDispensar = { medicamentoParaFoto = null },
+            aoFotoProcessada = { base64 ->
+                repositorio.atualizarFotoMedicamento(perfil, med.id, base64)
+                medicamentoParaFoto = null
+                Toast.makeText(contexto, "Fotografia guardada com sucesso!", Toast.LENGTH_SHORT).show()
+            },
+            temNet = temNet,
+        )
+    }
+
+    // DIÁLOGO DE CONFIRMAÇÃO PARA REMOVER FOTOGRAFIA
+    confirmarRemoverFotoMed?.let { med ->
         AlertDialog(
-            onDismissRequest = { fotoAmpliada = null },
-            title = { Text("Fotografia da Embalagem") },
+            onDismissRequest = { confirmarRemoverFotoMed = null },
+            icon = { Icon(Icons.Rounded.Warning, null, tint = Color(0xFFDC2626)) },
+            title = { Text("Remover Fotografia?", fontWeight = FontWeight.Bold) },
             text = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Embalagem ampliada",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
+                Text("Tem a certeza de que deseja remover a fotografia da caixa de ${med.nome}? O medicamento continuará registado na sua lista.")
             },
             confirmButton = {
-                TextButton(onClick = { fotoAmpliada = null }) {
-                    Text("Fechar")
+                Button(
+                    onClick = {
+                        repositorio.atualizarFotoMedicamento(perfil, med.id, null)
+                        ProcessadorImagem.apagarFotoLocal(contexto, med.id)
+                        confirmarRemoverFotoMed = null
+                        medicamentoParaVerFoto = null
+                        Toast.makeText(contexto, "Fotografia removida.", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                ) {
+                    Text("Sim, Remover", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarRemoverFotoMed = null }) {
+                    Text("Cancelar")
                 }
             },
         )
@@ -1203,6 +1379,507 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             },
         )
     }
+
+    // DIÁLOGO SEM INTERNET PARA IA
+    if (avisoSemInternetMedicacao) {
+        AlertDialog(
+            onDismissRequest = { avisoSemInternetMedicacao = false },
+            icon = { Icon(Icons.Rounded.WifiOff, null, tint = Color(0xFFDC2626), modifier = Modifier.size(36.dp)) },
+            title = { Text("Sem Ligação à Internet", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("O assistente inteligente necessita de ligação à internet para analisar o medicamento. Por favor, ligue o Wi-Fi ou os dados móveis no seu telemóvel.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = { avisoSemInternetMedicacao = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+                ) {
+                    Text("Compreendi")
+                }
+            },
+        )
+    }
+
+    // DIÁLOGO DE EXPLICAÇÃO DO MEDICAMENTO COM IA
+    if (medParaExplicarIa != null) {
+        val med = medParaExplicarIa!!
+        AlertDialog(
+            onDismissRequest = {
+                medParaExplicarIa = null
+                textoExplicacaoIa = null
+                erroExplicacaoIa = null
+            },
+            icon = {
+                Icon(
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = MarcaMedio,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    text = med.nome,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (aCarregarExplicacaoIa) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 18.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MarcaMedio,
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "A analisar indicações clínicas com IA…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Atenuado,
+                            )
+                        }
+                    } else if (textoExplicacaoIa != null) {
+                        val explicacao = textoExplicacaoIa!!
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Superficie2)
+                                .padding(14.dp),
+                        ) {
+                            Text(
+                                text = explicacao,
+                                style = MaterialTheme.typography.bodyMedium,
+                                lineHeight = 22.sp,
+                            )
+                        }
+
+                        // Botão Ouvir (Apenas se clicar!)
+                        BotaoOuvir(
+                            aoClicar = { plataforma.falar(explicacao) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        Text(
+                            text = "Aviso: Informação gerada por Inteligência Artificial. Siga sempre as indicações da receita e confirme com o seu médico ou farmacêutico.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Atenuado,
+                            lineHeight = 15.sp,
+                        )
+                    } else if (erroExplicacaoIa != null) {
+                        Text(
+                            text = erroExplicacaoIa ?: "Ocorreu um erro ao consultar a IA.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        medParaExplicarIa = null
+                        textoExplicacaoIa = null
+                        erroExplicacaoIa = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+                ) {
+                    Text("Fechar")
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Diálogo profissional para selecionar ou fotografar a caixa da embalagem do medicamento.
+ * Permite capturar com a câmara ou carregar um ficheiro de imagem transferido para o telemóvel.
+ * Otimiza e guarda a imagem localmente (offline) e prepara para sincronização com o Firestore no campo "fotografia".
+ */
+@Composable
+fun DialogoSelecionarFotoMedicamento(
+    nomeMedicamento: String,
+    idMedicamento: Long? = null,
+    aoDispensar: () -> Unit,
+    aoFotoProcessada: (String) -> Unit,
+    temNet: Boolean,
+) {
+    val contexto = LocalContext.current
+    var uriTempCamera by remember { mutableStateOf<Uri?>(null) }
+    var aProcessarImagem by remember { mutableStateOf(false) }
+
+    val launcherCamera = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { sucesso ->
+        if (sucesso && uriTempCamera != null) {
+            aProcessarImagem = true
+            val base64 = ProcessadorImagem.processarUriParaBase64(
+                context = contexto,
+                uri = uriTempCamera!!,
+                idMedicamento = idMedicamento,
+            )
+            aProcessarImagem = false
+            if (base64 != null) {
+                aoFotoProcessada(base64)
+            } else {
+                Toast.makeText(contexto, "Não foi possível processar a fotografia da câmara.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val launcherPermissaoCamera = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { concedida ->
+        if (concedida) {
+            val (uri, _) = ProcessadorImagem.criarUriFotoTemporaria(contexto)
+            uriTempCamera = uri
+            launcherCamera.launch(uri)
+        } else {
+            Toast.makeText(contexto, "Permissão da câmara necessária para fotografar a caixa.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val launcherGaleria = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            aProcessarImagem = true
+            val base64 = ProcessadorImagem.processarUriParaBase64(
+                context = contexto,
+                uri = uri,
+                idMedicamento = idMedicamento,
+            )
+            aProcessarImagem = false
+            if (base64 != null) {
+                aoFotoProcessada(base64)
+            } else {
+                Toast.makeText(contexto, "Não foi possível carregar a imagem do telemóvel.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun iniciarCamera() {
+        val temPermissao = ContextCompat.checkSelfPermission(
+            contexto,
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (temPermissao) {
+            val (uri, _) = ProcessadorImagem.criarUriFotoTemporaria(contexto)
+            uriTempCamera = uri
+            launcherCamera.launch(uri)
+        } else {
+            launcherPermissaoCamera.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!aProcessarImagem) aoDispensar() },
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MarcaMedio.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Rounded.CameraAlt, contentDescription = null, tint = MarcaMedio, modifier = Modifier.size(24.dp))
+            }
+        },
+        title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Foto da Caixa / Embalagem",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (nomeMedicamento.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = nomeMedicamento,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Atenuado,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (aProcessarImagem) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = MarcaMedio)
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "A otimizar fotografia da embalagem...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Como pretende adicionar a fotografia da caixa deste medicamento?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    // OPÇÃO 1: CÂMARA (Tirar Foto)
+                    Card(
+                        onClick = { iniciarCamera() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MarcaMedio),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.CameraAlt,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Tirar fotografia agora",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E3A8A),
+                                )
+                                Text(
+                                    text = "Fotografe a frente da embalagem ou caixa",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF3B82F6),
+                                )
+                            }
+                        }
+                    }
+
+                    // OPÇÃO 2: GALERIA / FICHEIROS
+                    Card(
+                        onClick = { launcherGaleria.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = BorderStroke(1.dp, Color(0xFFA7F3D0)),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF059669)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.PhotoLibrary,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Escolher do telemóvel",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF065F46),
+                                )
+                                Text(
+                                    text = "Foto da galeria ou ficheiro transferido",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF10B981),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = aoDispensar, enabled = !aProcessarImagem) {
+                Text("Cancelar")
+            }
+        },
+    )
+}
+
+/**
+ * Diálogo de visualização detalhada da fotografia da embalagem.
+ * Apresenta a fotografia em alta definição com indicação de sincronização (Cloud / Offline),
+ * botão para alterar a foto e botão para remover.
+ */
+@Composable
+fun DialogoVisualizadorFotoMedicamento(
+    medicamento: Medicamento,
+    aoDispensar: () -> Unit,
+    aoPedirAlterarFoto: () -> Unit,
+    aoPedirRemoverFoto: () -> Unit,
+    temNet: Boolean,
+) {
+    val contexto = LocalContext.current
+    val bitmap = remember(medicamento.fotografia) {
+        ProcessadorImagem.descodificarBitmap(contexto, medicamento.id, medicamento.fotografia)
+    }
+
+    AlertDialog(
+        onDismissRequest = aoDispensar,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(medicamento.cor).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Medication,
+                        contentDescription = null,
+                        tint = Color(medicamento.cor),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = medicamento.nome,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = if (medicamento.laboratorio.isNotBlank()) "Laboratório: ${medicamento.laboratorio}" else "Foto da Caixa / Embalagem",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Atenuado,
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // IMAGEM EM DESTAQUE
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFF8FAFC))
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = "Embalagem de ${medicamento.nome}",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Image,
+                                contentDescription = null,
+                                tint = Atenuado,
+                                modifier = Modifier.size(48.dp),
+                            )
+                            Text(
+                                "Imagem não disponível",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Atenuado,
+                            )
+                        }
+                    }
+                }
+
+                // BOTÕES DE AÇÃO: ALTERAR E REMOVER
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = aoPedirAlterarFoto,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MarcaMedio),
+                    ) {
+                        Icon(Icons.Rounded.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Alterar", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = aoPedirRemoverFoto,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                        border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                    ) {
+                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Remover", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = aoDispensar,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
+            ) {
+                Text("Fechar")
+            }
+        },
+    )
 }
 
 /**
@@ -1216,22 +1893,18 @@ fun DialogoFormularioMedicamento(
     aoGuardar: (Medicamento) -> Unit,
     plataforma: ServicosDispositivo,
 ) {
+    val contexto = LocalContext.current
     var nome by remember { mutableStateOf(medicamentoExistente?.nome ?: "") }
     var finalidade by remember { mutableStateOf(medicamentoExistente?.finalidade ?: "") }
     var principioAtivo by remember { mutableStateOf(medicamentoExistente?.principioAtivo ?: "") }
+    var laboratorio by remember { mutableStateOf(medicamentoExistente?.laboratorio ?: "") }
     var listaHoras by remember {
         mutableStateOf(medicamentoExistente?.listaHorarios ?: listOf("08:00"))
     }
     var horaCustom by remember { mutableStateOf("") }
     var erroHora by remember { mutableStateOf<String?>(null) }
     var fotografia by remember { mutableStateOf(medicamentoExistente?.fotografia) }
-
-    val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        fotografia = bitmap?.paraBase64()
-    }
-    val permissaoCamara = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { concedida ->
-        if (concedida) camara.launch(null)
-    }
+    var mostrarSeletorFotoForm by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = aoDispensar,
@@ -1266,47 +1939,96 @@ fun DialogoFormularioMedicamento(
             ) {
                 // FOTOGRAFIA E SCANNER
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = { permissaoCamara.launch(Manifest.permission.CAMERA) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF), contentColor = MarcaMedio),
+                    val bmp = remember(fotografia) {
+                        ProcessadorImagem.descodificarBitmap(contexto, medicamentoExistente?.id, fotografia)
+                    }
+
+                    if (bmp != null) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
                         ) {
-                            val bitmap = remember(fotografia) { fotografia?.descodificarBitmap() }
-                            if (bitmap != null) {
-                                Image(bitmap.asImageBitmap(), null, Modifier.size(24.dp), contentScale = ContentScale.Crop)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Foto ✓", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            } else {
-                                Icon(Icons.Rounded.CameraAlt, "Fotografar", modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Foto", fontSize = 12.sp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = "Embalagem",
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentScale = ContentScale.Crop,
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Foto da Caixa ✓",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MarcaMedio,
+                                    )
+                                }
+                                TextButton(onClick = { mostrarSeletorFotoForm = true }) {
+                                    Text("Alterar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                IconButton(
+                                    onClick = { fotografia = null },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = "Remover",
+                                        tint = Color(0xFFDC2626),
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
-
-                        Button(
-                            onClick = {
-                                nome = "Metformina 850 mg"
-                                finalidade = "Diabetes"
-                                principioAtivo = "metformina"
-                                listaHoras = listOf("08:00", "20:00")
-                                plataforma.falar("Código detetado: Metformina 850 miligramas, duas tomas ao dia.")
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Superficie2, contentColor = MaterialTheme.colorScheme.onSurface),
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(Icons.Rounded.QrCodeScanner, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Ler Código", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Button(
+                                onClick = { mostrarSeletorFotoForm = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFEFF6FF),
+                                    contentColor = MarcaMedio,
+                                ),
+                            ) {
+                                Icon(Icons.Rounded.CameraAlt, "Fotografar", modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Foto da Caixa", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    nome = "Metformina 850 mg"
+                                    finalidade = "Diabetes"
+                                    principioAtivo = "metformina"
+                                    laboratorio = "Generis"
+                                    listaHoras = listOf("08:00", "20:00")
+                                    plataforma.falar("Código detetado: Metformina 850 miligramas, duas tomas ao dia.")
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Superficie2, contentColor = MaterialTheme.colorScheme.onSurface),
+                            ) {
+                                Icon(Icons.Rounded.QrCodeScanner, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Ler Código", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
@@ -1343,6 +2065,18 @@ fun DialogoFormularioMedicamento(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Princípio Ativo (Substância)") },
                         placeholder = { Text("Ex: paracetamol") },
+                        singleLine = true,
+                    )
+                }
+
+                // LABORATÓRIO FARMACÊUTICO
+                item {
+                    OutlinedTextField(
+                        value = laboratorio,
+                        onValueChange = { laboratorio = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Laboratório Farmacêutico") },
+                        placeholder = { Text("Ex: Bial, Generis, Labesfal, Cinfa...") },
                         singleLine = true,
                     )
                 }
@@ -1504,6 +2238,7 @@ fun DialogoFormularioMedicamento(
                             principioAtivo = principioAtivo.trim().lowercase(),
                             hora = horaFinal,
                             fotografia = fotografia,
+                            laboratorio = laboratorio.trim(),
                         ) ?: Medicamento(
                             id = System.currentTimeMillis(),
                             nome = nome.trim(),
@@ -1513,6 +2248,7 @@ fun DialogoFormularioMedicamento(
                             cor = 0xFF1D5BD8,
                             ativo = true,
                             fotografia = fotografia,
+                            laboratorio = laboratorio.trim(),
                         )
                         aoGuardar(medSalvo)
                     }
@@ -1529,17 +2265,24 @@ fun DialogoFormularioMedicamento(
             }
         },
     )
+
+    if (mostrarSeletorFotoForm) {
+        DialogoSelecionarFotoMedicamento(
+            nomeMedicamento = nome.ifBlank { "Medicamento" },
+            idMedicamento = medicamentoExistente?.id,
+            aoDispensar = { mostrarSeletorFotoForm = false },
+            aoFotoProcessada = { base64 ->
+                fotografia = base64
+                mostrarSeletorFotoForm = false
+            },
+            temNet = plataforma.temConexaoInternet(),
+        )
+    }
 }
 
-private fun Bitmap.paraBase64(): String {
-    val output = ByteArrayOutputStream()
-    compress(Bitmap.CompressFormat.JPEG, 70, output)
-    return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
-}
+private fun Bitmap.paraBase64(): String = ProcessadorImagem.processarBitmapParaBase64(null, this)
 
-private fun String.descodificarBitmap(): Bitmap? = runCatching {
-    Base64.decode(this, Base64.NO_WRAP).let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-}.getOrNull()
+private fun String.descodificarBitmap(): Bitmap? = ProcessadorImagem.descodificarBitmap(null, null, this)
 
 @Preview(name = "Ecrã Medicação", showBackground = true)
 @Composable
