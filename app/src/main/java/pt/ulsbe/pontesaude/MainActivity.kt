@@ -12,9 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.core.content.ContextCompat
-import pt.ulsbe.pontesaude.data.RepositorioApp
-import pt.ulsbe.pontesaude.ui.NavegacaoApp
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.ui.navigation.NavegacaoApp
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 
 /**
  * Atividade principal da aplicação Ponte Saúde.
@@ -48,12 +48,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val repositorio = remember { RepositorioApp(applicationContext) }
+            val container = remember { AppContainer(applicationContext) }
             val plataforma = remember { ServicosDispositivo(this) }
             DisposableEffect(Unit) {
                 onDispose { plataforma.fechar() }
             }
-            NavegacaoApp(repositorio, plataforma)
+            NavegacaoApp(container, plataforma)
         }
     }
 }

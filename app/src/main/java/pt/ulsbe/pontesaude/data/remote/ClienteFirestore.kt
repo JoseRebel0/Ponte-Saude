@@ -80,6 +80,12 @@ class ClienteFirestore(
 
     suspend fun apagarPerfil(idPerfil: String) = perfis.apagarPerfil(idPerfil)
 
+    suspend fun apagarPerfisEmMassa(ids: List<String>) {
+        for (id in ids) {
+            perfis.apagarPerfil(id)
+        }
+    }
+
     fun iniciarEscutaPerfisEmTempoReal(aoAlterar: () -> Unit) = perfis.iniciarEscutaPerfisEmTempoReal(aoAlterar)
 
     fun pararEscutaPerfis() = perfis.pararEscutaPerfis()
@@ -87,6 +93,9 @@ class ClienteFirestore(
     // --- Módulo: Medicação ---
 
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) =
+        medicacao.guardarMedicamento(idPerfil, med)
+
+    suspend fun atualizarMedicamento(idPerfil: String, med: Medicamento) =
         medicacao.guardarMedicamento(idPerfil, med)
 
     suspend fun atualizarImagemMedicamento(idPerfil: String, idMedicamento: Long, imagemBase64: String) =
@@ -102,6 +111,9 @@ class ClienteFirestore(
 
     suspend fun guardarConsulta(idPerfil: String, consulta: Consulta) =
         consultas.guardarConsulta(idPerfil, consulta)
+
+    suspend fun atualizarConsultas(idPerfil: String, consultas: List<Consulta>) =
+        this.consultas.atualizarConsultas(idPerfil, consultas)
 
     suspend fun removerConsulta(idPerfil: String, idConsulta: Int) =
         consultas.removerConsulta(idPerfil, idConsulta)

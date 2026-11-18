@@ -48,6 +48,20 @@ class ApiConsultasRemoto(
     }
 
     /**
+     * Atualiza toda a lista de consultas de um perfil no Firestore.
+     */
+    suspend fun atualizarConsultas(idPerfil: String, consultas: List<Consulta>) = withContext(Dispatchers.IO) {
+        val col = db.collection("perfis").document(idPerfil).collection("consultas")
+        val snapshot = col.get().await()
+        for (doc in snapshot.documents) {
+            doc.reference.delete().await()
+        }
+        for (c in consultas) {
+            guardarConsulta(idPerfil, c)
+        }
+    }
+
+    /**
      * Atualiza os itens selecionados na checklist de preparação da consulta no Firestore.
      */
     suspend fun atualizarChecklistConsulta(

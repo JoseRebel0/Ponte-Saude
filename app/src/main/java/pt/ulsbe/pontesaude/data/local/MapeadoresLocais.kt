@@ -23,10 +23,13 @@ import pt.ulsbe.pontesaude.model.VoucherResgatado
  * Conversores e extensões de mapeamento entre Modelos de Domínio e Entidades Room SQLite.
  */
 
+fun PerfilEntity.paraModelo(): Perfil =
+    paraModelo(emptyList(), emptyList(), emptyList())
+
 fun PerfilEntity.paraModelo(
-    consultas: List<Consulta>,
-    medicamentos: List<Medicamento>,
-    notas: List<Nota>,
+    consultas: List<Consulta> = emptyList(),
+    medicamentos: List<Medicamento> = emptyList(),
+    notas: List<Nota> = emptyList(),
 ): Perfil {
     val produtos = outrosProdutosJson.deserializarListaString()
     val perfisCuidados = perfisCuidadosJson.deserializarListaString()

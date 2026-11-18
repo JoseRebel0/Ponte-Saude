@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data
+package pt.ulsbe.pontesaude.util
 
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento

@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui
+package pt.ulsbe.pontesaude.util
 
 import android.Manifest
 import android.app.AlarmManager
@@ -28,7 +28,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import pt.ulsbe.pontesaude.MainActivity
 import pt.ulsbe.pontesaude.R
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
@@ -335,6 +336,21 @@ class ServicosDispositivo(context: Context?) {
     }
 
     /**
+     * Agenda múltiplos alarmes para a lista de medicamentos ativos.
+     */
+    fun agendarMultiplosAlarmes(medicamentos: List<Medicamento>) {
+        medicamentos.filter { it.ativo }.forEach { med ->
+            med.listaHorarios.forEach { horario ->
+                val partes = horario.trim().split(":")
+                val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
+                val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
+                agendarAlarmeMedicacao(med.id, med.nome, med.finalidade, h, m)
+                definirAlarmeRelogio(h, m, "Tomar ${med.nome}")
+            }
+        }
+    }
+
+    /**
      * Cancela todos os alarmes programados para a lista de medicamentos.
      */
     fun cancelarTodosOsAlarmes(medicamentos: List<Medicamento>) {
@@ -612,6 +628,18 @@ class ServicosDispositivo(context: Context?) {
             sintetizadorVoz?.stop()
         }
         falaPendente = null
+    }
+
+    fun pararFala() {
+        parar()
+    }
+
+    fun ligar112() {
+        marcarNumero("112")
+    }
+
+    fun ligarSaude24() {
+        marcarNumero("808242424")
     }
 
     fun marcarNumero(numero: String) {
@@ -932,12 +960,12 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
         val dose = intent.getStringExtra("dose") ?: "Dose indicada"
         val hora = intent.getStringExtra("hora") ?: "08:00"
 
-        val repo = RepositorioApp(context)
-        // Só dispara se os alarmes ou notificações estiverem ativos no repositório
-        if (!repo.agendaEAlarmesAtivos && !repo.notificacoesAtivas) return
+        val config = ConfiguracaoRepository(context)
+        // Só dispara se os alarmes ou notificações estiverem ativos
+        if (!config.agendaEAlarmesAtivos && !config.notificacoesAtivas) return
 
-        val perfil = repo.perfilAtivo
-        val med = repo.medicamentos(perfil).find { it.id == id }
+        val db = BaseDadosLocal.obterInstancia(context)
+        val med = db.medicamentoDao().obterPorId(id)
         // Se o medicamento já não existir ou estiver desativado individualmente, cancela
         if (med != null && !med.ativo) return
 
@@ -950,7 +978,7 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
         )
 
         // Se o medicamento ainda estiver ativo e os alarmes ligados, reagendar para o dia seguinte
-        if (med?.ativo == true && repo.agendaEAlarmesAtivos) {
+        if (med?.ativo == true && config.agendaEAlarmesAtivos) {
             val partes = hora.split(":")
             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
             val m = partes.getOrNull(1)?.toIntOrNull() ?: 0

@@ -66,9 +66,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Perfil
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
@@ -83,7 +83,7 @@ import pt.ulsbe.pontesaude.ui.theme.Superficie2
  */
 @Composable
 fun DialogoAdicionarPessoaCuidada(
-    repositorio: RepositorioApp,
+    repositorio: PerfilRepository,
     plataforma: ServicosDispositivo?,
     aoFechar: () -> Unit,
     aoPessoaAdicionada: (Perfil) -> Unit,
@@ -555,7 +555,7 @@ fun DialogoAdicionarPessoaCuidada(
  */
 @Composable
 fun SecaoModoCuidador(
-    repositorio: RepositorioApp,
+    repositorio: PerfilRepository,
     plataforma: ServicosDispositivo?,
     modifier: Modifier = Modifier,
 ) {
@@ -910,7 +910,7 @@ fun SecaoModoCuidador(
  */
 @Composable
 fun BannerModoCuidadorInicio(
-    repositorio: RepositorioApp,
+    repositorio: PerfilRepository,
     plataforma: ServicosDispositivo?,
     aoGerirCuidador: () -> Unit,
 ) {
@@ -1001,7 +1001,7 @@ fun BannerModoCuidadorInicio(
  */
 @Composable
 fun BarraModoCuidadorTopo(
-    repositorio: RepositorioApp,
+    repositorio: PerfilRepository,
     aoGerir: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1077,7 +1077,7 @@ fun BarraModoCuidadorTopo(
  */
 @Composable
 fun DialogoTrocarContaCuidador(
-    repositorio: RepositorioApp,
+    repositorio: PerfilRepository,
     aoFechar: () -> Unit,
     aoGerir: () -> Unit,
 ) {

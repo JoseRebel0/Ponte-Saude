@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.inicio
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -54,11 +54,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.RepositorioApp
-import pt.ulsbe.pontesaude.data.formatarMomentoAtualizacao
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
+import pt.ulsbe.pontesaude.data.repository.formatarMomentoAtualizacao
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BannerModoCuidadorInicio
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
@@ -77,16 +78,18 @@ private data class Atalho(val rotulo: String, val icone: ImageVector, val acao: 
 @Composable
 fun EcraInicio(
     perfil: Perfil,
-    repositorio: RepositorioApp? = null,
+    perfilRepository: PerfilRepository? = null,
+    configuracaoRepository: ConfiguracaoRepository? = null,
+    aoSincronizar: (suspend () -> Unit)? = null,
     plataforma: ServicosDispositivo,
     navegarPara: (SeparadorApp) -> Unit,
 ) {
     val proxima = perfil.consultas.firstOrNull()
     var aAtualizar by remember { mutableStateOf(false) }
-    var timestampLocal by remember { mutableStateOf(repositorio?.timestampUltimaAtualizacao ?: System.currentTimeMillis()) }
+    var timestampLocal by remember { mutableStateOf(configuracaoRepository?.timestampUltimaAtualizacao ?: System.currentTimeMillis()) }
     val escopo = rememberCoroutineScope()
 
-    val textoAtualizacao = repositorio?.formatarUltimaAtualizacao() ?: formatarMomentoAtualizacao(timestampLocal)
+    val textoAtualizacao = configuracaoRepository?.formatarUltimaAtualizacao() ?: formatarMomentoAtualizacao(timestampLocal)
     val temInternet = plataforma.temConexaoInternet()
 
     fun dispararAtualizacao() {
@@ -96,7 +99,7 @@ fun EcraInicio(
             delay(600) // Transição suave de carregamento
             val online = plataforma.temConexaoInternet()
             if (online) {
-                repositorio?.sincronizarComFirestore()
+                aoSincronizar?.invoke()
                 timestampLocal = System.currentTimeMillis()
             }
             aAtualizar = false
@@ -134,9 +137,9 @@ fun EcraInicio(
                         .background(Brush.verticalGradient(listOf(MarcaMedio, Color(0xFF0F3D9E))))
                         .padding(start = 20.dp, end = 20.dp, top = 54.dp, bottom = 28.dp),
                 ) {
-                    if (repositorio?.modoCuidador == true) {
+                    if (perfilRepository?.modoCuidador == true) {
                         BannerModoCuidadorInicio(
-                            repositorio = repositorio,
+                            repositorio = perfilRepository,
                             plataforma = plataforma,
                             aoGerirCuidador = { navegarPara(SeparadorApp.DEFINICOES) },
                         )

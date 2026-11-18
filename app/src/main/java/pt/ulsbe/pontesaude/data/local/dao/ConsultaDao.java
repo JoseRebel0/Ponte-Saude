@@ -14,6 +14,12 @@ import pt.ulsbe.pontesaude.data.local.entity.ConsultaEntity;
  */
 @Dao
 public interface ConsultaDao {
+    @Query("SELECT * FROM consultas")
+    List<ConsultaEntity> obterTodos();
+
+    @Query("SELECT * FROM consultas WHERE id = :id LIMIT 1")
+    ConsultaEntity obterPorId(int id);
+
     @Query("SELECT * FROM consultas WHERE idPerfil = :idPerfil")
     List<ConsultaEntity> obterPorPerfil(String idPerfil);
 

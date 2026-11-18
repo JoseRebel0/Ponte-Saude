@@ -20,7 +20,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PonteSaude">
         <receiver
-            android:name=".ui.AlarmeMedicacaoReceiver"
+            android:name=".util.AlarmeMedicacaoReceiver"
             android:exported="false" />
         <activity
             android:name=".MainActivity"
