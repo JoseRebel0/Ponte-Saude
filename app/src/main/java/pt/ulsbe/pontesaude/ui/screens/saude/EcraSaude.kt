@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.saude
 
 import android.app.Activity
 import android.content.Intent
@@ -82,8 +82,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.RepositorioApp
-import pt.ulsbe.pontesaude.data.calcularNivelSeguranca
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
+import pt.ulsbe.pontesaude.data.repository.SaudeRepository
+import pt.ulsbe.pontesaude.data.repository.calcularNivelSeguranca
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -92,7 +95,7 @@ import pt.ulsbe.pontesaude.model.RecompensaSeguranca
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.model.TipoModulo
 import pt.ulsbe.pontesaude.model.VoucherResgatado
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
@@ -143,19 +146,21 @@ fun EcraSaude(
     perfil: Perfil,
     idModuloAberto: String?,
     concluidos: List<String>,
-    repositorio: RepositorioApp? = null,
+    saudeRepository: SaudeRepository? = null,
+    perfilRepository: PerfilRepository? = null,
+    configuracaoRepository: ConfiguracaoRepository? = null,
     plataforma: ServicosDispositivo,
     aoAbrirModulo: (String?) -> Unit,
     aoAlternarModulo: (String) -> Unit,
     aoNavegar: (SeparadorApp) -> Unit,
 ) {
-    val modulo = repositorio?.modulosSaude?.find { it.id == idModuloAberto }
+    val modulo = saudeRepository?.modulosSaude?.find { it.id == idModuloAberto }
     if (modulo != null) {
         EcraModulo(
             modulo = modulo,
             perfil = perfil,
             concluidos = concluidos,
-            repositorio = repositorio,
+            saudeRepository = saudeRepository,
             plataforma = plataforma,
             aoVoltar = { aoAbrirModulo(null) },
             aoAlternar = aoAlternarModulo,
@@ -172,8 +177,8 @@ fun EcraSaude(
     var mensagemNotificacao by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (repositorio?.modoCuidador == true) "Saúde · ${perfil.nome}" else "Saúde"
-        val subtituloEcra = if (repositorio?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
+        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Saúde · ${perfil.nome}" else "Saúde"
+        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
         val estadoLista = rememberLazyListState()
         PullToRefreshBox(
@@ -182,7 +187,7 @@ fun EcraSaude(
                 aAtualizar = true
                 escopo.launch {
                     delay(800) // Transição suave de carregamento
-                    repositorio?.registarAtualizacao()
+                    configuracaoRepository?.registarAtualizacao()
                     aAtualizar = false
                 }
             },
@@ -195,7 +200,7 @@ fun EcraSaude(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-            if (repositorio?.modoCuidador == true) {
+            if (perfilRepository?.modoCuidador == true) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -252,9 +257,9 @@ fun EcraSaude(
 
             // PROGRAMA DE LITERACIA & SEGURANÇA (HUD POLIDO E EQUILIBRADO)
             item {
-                val pontos = repositorio?.pontosSeguranca ?: 50
+                val pontos = saudeRepository?.pontosSeguranca ?: 50
                 val infoNivel = calcularNivelSeguranca(pontos)
-                val vouchers = repositorio?.vouchersResgatados.orEmpty()
+                val vouchers = saudeRepository?.vouchersResgatados.orEmpty()
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -460,7 +465,7 @@ fun EcraSaude(
                     Text("Toque para abrir, ouvir e acumular pontos de segurança", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            val listaModulos = repositorio?.modulosSaude ?: emptyList()
+            val listaModulos = saudeRepository?.modulosSaude ?: emptyList()
             items(listaModulos, key = { it.id }) { item ->
                 val concluido = item.id in concluidos
                 Card(
@@ -548,16 +553,16 @@ fun EcraSaude(
                     Text("Vídeos educativos do SNS no YouTube · Assista e ganhe +30 pontos de literacia", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            val listaVideos = repositorio?.videosBiblioteca ?: emptyList()
+            val listaVideos = saudeRepository?.videosBiblioteca ?: emptyList()
             items(listaVideos, key = { it.id }) { video ->
-                val jaVisto = repositorio?.videosAssistidos?.contains(video.id) == true
+                val jaVisto = saudeRepository?.videosAssistidos?.contains(video.id) == true
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .clickable {
                             plataforma.abrirLigacao(video.urlYoutube)
-                            val pts = repositorio?.premiarVerVideo(video.id) ?: 0
+                            val pts = saudeRepository?.premiarVerVideo(video.id) ?: 0
                             if (pts > 0) {
                                 mensagemNotificacao = "⭐ Parabéns! Ganhou +$pts Pontos por assistir ao vídeo oficial «${video.titulo}»!"
                             }
@@ -662,11 +667,11 @@ fun EcraSaude(
 
     if (mostrarDialogoResgate) {
         DialogoResgateRecompensas(
-            pontosAtuais = repositorio?.pontosSeguranca ?: 50,
-            recompensas = repositorio?.catalogoRecompensas ?: emptyList(),
+            pontosAtuais = saudeRepository?.pontosSeguranca ?: 50,
+            recompensas = saudeRepository?.catalogoRecompensas ?: emptyList(),
             aoResgatar = { recompensa ->
                 mostrarDialogoResgate = false
-                val voucher = repositorio?.resgatarRecompensa(recompensa)
+                val voucher = saudeRepository?.resgatarRecompensa(recompensa)
                 if (voucher != null) {
                     voucherRecemResgatado = voucher
                 }
@@ -677,7 +682,7 @@ fun EcraSaude(
 
     if (mostrarDialogoVouchers) {
         DialogoMeusVouchers(
-            vouchers = repositorio?.vouchersResgatados.orEmpty(),
+            vouchers = saudeRepository?.vouchersResgatados.orEmpty(),
             aoFechar = { mostrarDialogoVouchers = false },
         )
     }
@@ -714,7 +719,7 @@ fun EcraModulo(
     modulo: ModuloSaude,
     perfil: Perfil,
     concluidos: List<String>,
-    repositorio: RepositorioApp? = null,
+    saudeRepository: SaudeRepository? = null,
     plataforma: ServicosDispositivo,
     aoVoltar: () -> Unit,
     aoAlternar: (String) -> Unit,
@@ -750,7 +755,7 @@ fun EcraModulo(
             item {
                 BotaoOuvir("Ouvir este módulo (+25 pts)", {
                     plataforma.falar(modulo.fala)
-                    val pts = repositorio?.premiarOuvirModulo(modulo.id) ?: 0
+                    val pts = saudeRepository?.premiarOuvirModulo(modulo.id) ?: 0
                     if (pts > 0) {
                         mensagemPontos = "🎉 Parabéns! Ganhou +$pts Pontos de Segurança por ouvir este módulo!"
                     }
@@ -772,13 +777,12 @@ fun EcraModulo(
                             "Perguntar quais medicamentos aumentam o risco",
                             "Pedir ajuda quando preciso",
                         ),
-                        repositorio = repositorio,
                         plataforma = plataforma,
                     )
                 }
                 TipoModulo.CRIANCAS -> item { ModuloCriancas(plataforma) }
                 TipoModulo.CONTACTOS -> item { ModuloContactos(plataforma) }
-                TipoModulo.RESUMO -> item { ModuloResumo(concluidos, repositorio?.modulosSaude ?: emptyList(), aoAbrir) }
+                TipoModulo.RESUMO -> item { ModuloResumo(concluidos, saudeRepository?.modulosSaude ?: emptyList(), aoAbrir) }
                 TipoModulo.PERGUNTAS -> item { Button({ aoNavegar(SeparadorApp.NOTAS) }, Modifier.fillMaxWidth()) { Text("Preparar perguntas para o médico") } }
                 TipoModulo.MEDICAMENTOS -> item { Button({ aoNavegar(SeparadorApp.MEDICACAO) }, Modifier.fillMaxWidth()) { Text("Abrir a minha lista") } }
                 TipoModulo.INFO -> Unit
@@ -787,7 +791,7 @@ fun EcraModulo(
                 val feito = modulo.id in concluidos
                 Button(
                     onClick = {
-                        val pts = repositorio?.alternarModuloComPontos(modulo.id) ?: run {
+                        val pts = saudeRepository?.alternarModuloComPontos(modulo.id) ?: run {
                             aoAlternar(modulo.id)
                             0
                         }
@@ -816,7 +820,7 @@ fun EcraModulo(
                     Text(mensagemPontos.orEmpty())
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Saldo atual: ${repositorio?.pontosSeguranca ?: 50} pontos",
+                        "Saldo atual: ${saudeRepository?.pontosSeguranca ?: 50} pontos",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MarcaMedio,
@@ -837,7 +841,6 @@ private fun CartaoChecklist(
     titulo: String,
     entradas: List<String>,
     subtitulo: String? = "Checklist de Segurança do Utente",
-    repositorio: RepositorioApp? = null,
     plataforma: ServicosDispositivo? = null,
 ) {
     val itens = remember(titulo, entradas) {
@@ -856,7 +859,6 @@ private fun CartaoChecklist(
         subtitulo = subtitulo,
         itensPredefinidos = itens,
         chavePersistencia = "saude_${kotlin.math.abs(titulo.hashCode())}",
-        repositorio = repositorio,
         plataforma = plataforma,
         permiteAdicionar = true,
     )

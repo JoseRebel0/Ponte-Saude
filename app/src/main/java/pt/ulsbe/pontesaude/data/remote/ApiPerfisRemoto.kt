@@ -7,7 +7,7 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import pt.ulsbe.pontesaude.data.Criptografia
+import pt.ulsbe.pontesaude.util.Criptografia
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Nota

@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.apontamentos
 
 import android.app.Activity
 import android.content.Context
@@ -73,10 +73,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
+import pt.ulsbe.pontesaude.data.repository.NotaRepository
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
+import pt.ulsbe.pontesaude.data.repository.SaudeRepository
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
@@ -129,7 +133,14 @@ private fun guardarHistoricoIa(context: Context, idPerfil: String, lista: List<I
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosDispositivo) {
+fun EcraApontamentos(
+    perfil: Perfil,
+    notaRepository: NotaRepository? = null,
+    saudeRepository: SaudeRepository? = null,
+    perfilRepository: PerfilRepository? = null,
+    configuracaoRepository: ConfiguracaoRepository? = null,
+    plataforma: ServicosDispositivo,
+) {
     val contexto = LocalContext.current
     var consultaTradutor by remember { mutableStateOf("") }
     var explicacaoTradutor by remember { mutableStateOf<String?>(null) }
@@ -154,7 +165,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
         mensagemErroIa = null
         aProcessarIa = true
         escopo.launch {
-            val resultado = repositorio.traduzirTermoComIa(termo)
+            val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
             resultado.onSuccess { explicacao ->
                 explicacaoTradutor = explicacao
                 val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
@@ -190,14 +201,14 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
 
     fun adicionarNotaAoRegisto(texto: String) {
         if (texto.isNotBlank()) {
-            val autorNota = if (repositorio.modoCuidador) "Cuidador de ${perfil.nomeCurto}" else "Eu"
-            repositorio.adicionarNota(perfil, Nota(texto.trim(), autorNota))
+            val autorNota = if (perfilRepository?.modoCuidador == true) "Cuidador de ${perfil.nomeCurto}" else "Eu"
+            notaRepository?.adicionarNota(perfil, Nota(texto.trim(), autorNota))
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (repositorio.modoCuidador) "Notas · ${perfil.nome}" else "Notas"
-        val subtituloEcra = if (repositorio.modoCuidador) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
+        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Notas · ${perfil.nome}" else "Notas"
+        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
         PullToRefreshBox(
             isRefreshing = aAtualizar,
@@ -205,7 +216,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                 aAtualizar = true
                 escopo.launch {
                     delay(800) // Transição suave de carregamento
-                    repositorio.registarAtualizacao()
+                    configuracaoRepository?.registarAtualizacao()
                     aAtualizar = false
                 }
             },
@@ -219,7 +230,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-                if (repositorio.modoCuidador) {
+                if (perfilRepository?.modoCuidador == true) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -528,7 +539,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                 }
 
                 // 3. LISTA DE APONTAMENTOS REGISTADOS
-                val notas = repositorio.notas(perfil)
+                val notas = notaRepository?.notas(perfil) ?: perfil.notas
                 if (notas.isEmpty()) {
                     item {
                         Box(
@@ -563,7 +574,7 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
                                     )
                                 }
                                 IconButton(
-                                    onClick = { repositorio.apagarNota(perfil, indice) },
+                                    onClick = { notaRepository?.apagarNota(perfil, indice) },
                                     modifier = Modifier.size(36.dp),
                                 ) {
                                     Icon(Icons.Rounded.Delete, "Apagar nota", tint = Atenuado, modifier = Modifier.size(20.dp))
@@ -784,10 +795,6 @@ fun EcraApontamentos(perfil: Perfil, repositorio: RepositorioApp, plataforma: Se
     }
 }
 
-// Aliases para compatibilidade
-@Composable
-fun EcraNotas(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosDispositivo) =
-    EcraApontamentos(perfil, repositorio, plataforma)
 
 // ==========================================
 // PREVIEWS COM COMPOSABLE NO ANDROID STUDIO
@@ -801,10 +808,15 @@ fun PreVisualizacaoEcraApontamentos() {
         nome = "Maria Inácia Silva",
         nomeCurto = "Maria",
         iniciais = "MS",
-        notas = listOf(Nota("Perguntar sobre a tensão matinal", "Eu")),
+        notas = listOf(
+            Nota("Perguntar sobre a tensão matinal", "Eu"),
+            Nota("Sentiu tonturas ligeiras na quinta-feira após o pequeno-almoço", "Cuidador"),
+        ),
     )
-    val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
-        EcraApontamentos(perfil = perfil, repositorio = remember { RepositorioApp(contexto) }, plataforma = ServicosDispositivo(null))
+        EcraApontamentos(
+            perfil = perfil,
+            plataforma = ServicosDispositivo(null),
+        )
     }
 }

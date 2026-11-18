@@ -63,10 +63,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.ItemChecklist
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.Superficie2
@@ -88,20 +88,20 @@ fun ChecklistInterativa(
     subtitulo: String? = null,
     itensPredefinidos: List<ItemChecklist>,
     chavePersistencia: String,
-    repositorio: RepositorioApp? = null,
+    consultaRepository: ConsultaRepository? = null,
     plataforma: ServicosDispositivo? = null,
     permiteAdicionar: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val marcados = remember(chavePersistencia) {
-        val salvos = repositorio?.obterChecklistSalva(chavePersistencia).orEmpty()
+        val salvos = consultaRepository?.obterChecklistSalva(chavePersistencia).orEmpty()
         mutableStateMapOf<String, Boolean>().apply {
             salvos.forEach { put(it, true) }
         }
     }
 
     val customItens = remember(chavePersistencia) {
-        val salvosCustom = repositorio?.obterItensCustomChecklist(chavePersistencia).orEmpty()
+        val salvosCustom = consultaRepository?.obterItensCustomChecklist(chavePersistencia).orEmpty()
         mutableStateListOf<ItemChecklist>().apply {
             salvosCustom.forEachIndexed { i, texto ->
                 add(
@@ -122,14 +122,14 @@ fun ChecklistInterativa(
     var filtroAtual by remember { mutableStateOf(FiltroChecklist.TODAS) }
 
     fun sincronizarMarcados() {
-        repositorio?.salvarChecklist(
+        consultaRepository?.salvarChecklist(
             chavePersistencia,
             marcados.filter { it.value }.keys.toSet(),
         )
     }
 
     fun sincronizarCustom() {
-        repositorio?.salvarItensCustomChecklist(
+        consultaRepository?.salvarItensCustomChecklist(
             chavePersistencia,
             customItens.map { it.texto },
         )

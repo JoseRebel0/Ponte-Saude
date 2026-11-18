@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.consultas
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,12 +62,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
+import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.Perfil
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
@@ -84,8 +87,15 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataforma: ServicosDispositivo) {
-    val consultas = repositorio?.consultas(perfil) ?: perfil.consultas
+fun EcraConsultas(
+    perfil: Perfil,
+    consultaRepository: ConsultaRepository? = null,
+    perfilRepository: PerfilRepository? = null,
+    configuracaoRepository: ConfiguracaoRepository? = null,
+    aoSincronizar: (suspend () -> Unit)? = null,
+    plataforma: ServicosDispositivo,
+) {
+    val consultas = consultaRepository?.consultas(perfil) ?: perfil.consultas
     val estadoLista = rememberLazyListState()
     var aAtualizar by remember { mutableStateOf(false) }
     val escopo = rememberCoroutineScope()
@@ -99,7 +109,7 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
     val selecionada = consultas.firstOrNull { it.id == idSelecionado } ?: consultas.firstOrNull()
 
     // Sincronização automática com o calendário nativo do telemóvel por defeito
-    val agendaAtiva = repositorio?.agendaEAlarmesAtivos ?: true
+    val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
     LaunchedEffect(consultas, agendaAtiva) {
         if (agendaAtiva) {
             plataforma.sincronizarConsultasNoCalendario(consultas)
@@ -109,15 +119,15 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
     }
 
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (repositorio?.modoCuidador == true) "Consultas · ${perfil.nome}" else "Consultas"
-        val subtituloEcra = if (repositorio?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Agenda e exames"
+        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Consultas · ${perfil.nome}" else "Consultas"
+        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Agenda e exames"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
                 aAtualizar = true
                 escopo.launch {
-                    repositorio?.sincronizarComFirestore()
+                    aoSincronizar?.invoke()
                     delay(500)
                     aAtualizar = false
                 }
@@ -132,7 +142,7 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-                if (repositorio?.modoCuidador == true) {
+                if (perfilRepository?.modoCuidador == true) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -228,7 +238,7 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
                             subtitulo = "Preparação específica para ${consultaAtiva.tipo}",
                             itensPredefinidos = itensChecklist,
                             chavePersistencia = "consulta_${consultaAtiva.id}",
-                            repositorio = repositorio,
+                            consultaRepository = consultaRepository,
                             plataforma = plataforma,
                             permiteAdicionar = false,
                         )
@@ -380,7 +390,7 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
             onDismissRequest = { mostrarDialogoNovaConsulta = false },
             title = {
                 Text(
-                    text = if (repositorio?.modoCuidador == true) "Agendar para ${perfil.nomeCurto}" else "Agendar Consulta ou Exame",
+                    text = if (perfilRepository?.modoCuidador == true) "Agendar para ${perfil.nomeCurto}" else "Agendar Consulta ou Exame",
                     fontWeight = FontWeight.Bold,
                 )
             },
@@ -453,7 +463,7 @@ fun EcraConsultas(perfil: Perfil, repositorio: RepositorioApp? = null, plataform
                             tipo = novoTipo.trim().ifBlank { "Consulta Externa" },
                             jejum = precisaJejum,
                         )
-                        repositorio?.adicionarConsulta(perfil, nova)
+                        consultaRepository?.adicionarConsulta(perfil, nova)
                         idSelecionado = novoId
                         mostrarDialogoNovaConsulta = false
                     },
@@ -568,13 +578,20 @@ fun PreVisualizacaoEcraConsultas() {
                 tipo = "Consulta Externa",
                 jejum = false,
             ),
+            Consulta(
+                id = 2,
+                dia = "28",
+                mes = "Nov",
+                titulo = "Análises Clínicas de Rotina",
+                localizacao = "Centro de Saúde de Barcelos",
+                tipo = "Exames",
+                jejum = true,
+            ),
         ),
     )
-    val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
         EcraConsultas(
             perfil = perfil,
-            repositorio = remember { RepositorioApp(contexto) },
             plataforma = ServicosDispositivo(null),
         )
     }

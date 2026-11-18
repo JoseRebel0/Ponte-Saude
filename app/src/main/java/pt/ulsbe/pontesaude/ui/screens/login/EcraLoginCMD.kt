@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.login
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -97,7 +97,8 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.R
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.Marca
@@ -119,7 +120,8 @@ private enum class ModoIdentificacao {
  */
 @Composable
 fun EcraLoginCMD(
-    repositorio: RepositorioApp,
+    perfilRepository: PerfilRepository? = null,
+    sincronizador: AppContainer? = null,
     aoAutenticar: (String) -> Unit,
 ) {
     val teclado = LocalSoftwareKeyboardController.current
@@ -140,9 +142,9 @@ fun EcraLoginCMD(
     var mostrarAjuda by remember { mutableStateOf(false) }
 
     // Sincronizar seleção se um perfil for apagado ou atualizado no Firestore em tempo real
-    LaunchedEffect(repositorio.todosOsPerfis.size) {
-        if (repositorio.todosOsPerfis.isNotEmpty() && repositorio.todosOsPerfis.none { it.id == perfilEscolhidoId }) {
-            repositorio.todosOsPerfis.firstOrNull()?.let { primeiro ->
+    LaunchedEffect(perfilRepository?.todosOsPerfis?.size ?: 0) {
+        if (perfilRepository != null && perfilRepository.todosOsPerfis.isNotEmpty() && perfilRepository.todosOsPerfis.none { it.id == perfilEscolhidoId }) {
+            perfilRepository.todosOsPerfis.firstOrNull()?.let { primeiro ->
                 perfilEscolhidoId = primeiro.id
                 telemovel = primeiro.telemovel.replace("+351 ", "")
                 nif = primeiro.nif
@@ -758,9 +760,9 @@ fun EcraLoginCMD(
                                             color = MarcaProfundo,
                                         )
                                         Text(
-                                            text = if (repositorio.estaASincronizarFirestore) "A sincronizar em tempo real..." else "Sincronizado em tempo real com o Firestore",
+                                            text = if (sincronizador?.estaASincronizarFirestore == true) "A sincronizar em tempo real..." else "Sincronizado em tempo real com o Firestore",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = if (repositorio.estaASincronizarFirestore) MarcaMedio else Atenuado,
+                                            color = if (sincronizador?.estaASincronizarFirestore == true) MarcaMedio else Atenuado,
                                         )
                                     }
                                 }
@@ -768,12 +770,12 @@ fun EcraLoginCMD(
                                 IconButton(
                                     onClick = {
                                         escopo.launch {
-                                            repositorio.sincronizarAutomatico(true)
+                                            sincronizador?.sincronizarAutomatico(true)
                                         }
                                     },
                                     modifier = Modifier.size(36.dp),
                                 ) {
-                                    if (repositorio.estaASincronizarFirestore) {
+                                    if (sincronizador?.estaASincronizarFirestore == true) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
                                             strokeWidth = 2.dp,
@@ -797,7 +799,7 @@ fun EcraLoginCMD(
                             )
 
                             // Seletor de Perfis de Teste
-                            val perfisDemonstracao = repositorio.todosOsPerfis
+                            val perfisDemonstracao = perfilRepository?.todosOsPerfis.orEmpty()
 
                             if (perfisDemonstracao.isEmpty()) {
                                 Surface(
@@ -877,7 +879,7 @@ fun EcraLoginCMD(
                                             IconButton(
                                                 onClick = {
                                                     escopo.launch {
-                                                        repositorio.apagarPerfil(perfil.id)
+                                                        perfilRepository?.apagarPerfil(perfil.id)
                                                         val restante = perfisDemonstracao.firstOrNull()
                                                         perfilEscolhidoId = restante?.id ?: "1"
                                                         if (restante != null) {
@@ -908,12 +910,14 @@ fun EcraLoginCMD(
                                     mensagemSucesso = null
                                     escopo.launch {
                                         try {
-                                            val criado = repositorio.criarPerfilAleatorio()
-                                            perfilEscolhidoId = criado.id
-                                            telemovel = criado.telemovel.replace("+351 ", "")
-                                            nif = criado.nif
-                                            pinCMD = "1234"
-                                            mensagemSucesso = "Perfil '${criado.nome}' criado com sucesso no Firebase!"
+                                            val criado = perfilRepository?.criarPerfilAleatorio()
+                                            if (criado != null) {
+                                                perfilEscolhidoId = criado.id
+                                                telemovel = criado.telemovel.replace("+351 ", "")
+                                                nif = criado.nif
+                                                pinCMD = "1234"
+                                                mensagemSucesso = "Perfil '${criado.nome}' criado com sucesso no Firebase!"
+                                            }
                                         } catch (e: Exception) {
                                             mensagemSucesso = "Erro ao criar perfil: ${e.localizedMessage}"
                                         } finally {
@@ -951,7 +955,7 @@ fun EcraLoginCMD(
                                         mensagemSucesso = null
                                         escopo.launch {
                                             try {
-                                                val apagados = repositorio.apagarPerfisAleatorios()
+                                                val apagados = perfilRepository?.apagarPerfisAleatorios() ?: 0
                                                 val rest = perfisDemonstracao.firstOrNull()
                                                 perfilEscolhidoId = rest?.id ?: "1"
                                                 if (rest != null) {
@@ -1163,7 +1167,8 @@ private fun gerarCodigoSimulado(): String {
 fun PreVisualizacaoEcraLoginCMD() {
     TemaPonteSaude(textoGrande = false) {
         EcraLoginCMD(
-            repositorio = RepositorioApp(androidx.compose.ui.platform.LocalContext.current),
+            perfilRepository = null,
+            sincronizador = null,
             aoAutenticar = {},
         )
     }

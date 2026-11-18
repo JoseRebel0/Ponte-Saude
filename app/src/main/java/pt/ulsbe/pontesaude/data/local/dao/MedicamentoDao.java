@@ -14,6 +14,9 @@ import pt.ulsbe.pontesaude.data.local.entity.MedicamentoEntity;
  */
 @Dao
 public interface MedicamentoDao {
+    @Query("SELECT * FROM medicamentos WHERE id = :id LIMIT 1")
+    MedicamentoEntity obterPorId(long id);
+
     @Query("SELECT * FROM medicamentos WHERE idPerfil = :idPerfil")
     List<MedicamentoEntity> obterPorPerfil(String idPerfil);
 

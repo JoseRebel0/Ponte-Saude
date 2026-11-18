@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.data
+package pt.ulsbe.pontesaude.util
 
 import android.content.Context
 import android.graphics.Bitmap

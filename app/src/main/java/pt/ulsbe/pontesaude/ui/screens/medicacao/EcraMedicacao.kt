@@ -1,4 +1,4 @@
-package pt.ulsbe.pontesaude.ui.screens
+package pt.ulsbe.pontesaude.ui.screens.medicacao
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -97,11 +97,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.ProcessadorImagem
-import pt.ulsbe.pontesaude.data.RepositorioApp
+import pt.ulsbe.pontesaude.util.ProcessadorImagem
+import pt.ulsbe.pontesaude.data.repository.AppContainer
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
+import pt.ulsbe.pontesaude.data.repository.MedicacaoRepository
+import pt.ulsbe.pontesaude.data.repository.NotaRepository
+import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
-import pt.ulsbe.pontesaude.ui.ServicosDispositivo
+import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
@@ -141,10 +145,18 @@ fun formatTimeForSpeech(time: String): String = formatarHoraParaFala(time)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: ServicosDispositivo) {
+fun EcraMedicacao(
+    perfil: Perfil,
+    medicacaoRepository: MedicacaoRepository? = null,
+    configuracaoRepository: ConfiguracaoRepository? = null,
+    notaRepository: NotaRepository? = null,
+    perfilRepository: PerfilRepository? = null,
+    aoSincronizar: (suspend () -> Unit)? = null,
+    plataforma: ServicosDispositivo,
+) {
     val contexto = LocalContext.current
     val temNet = plataforma.temConexaoInternet()
-    val medicamentos = repositorio.medicamentos(perfil)
+    val medicamentos = medicacaoRepository?.medicamentos(perfil) ?: perfil.medicamentos
     var aAtualizar by remember { mutableStateOf(false) }
     val escopo = rememberCoroutineScope()
 
@@ -176,7 +188,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
         erroExplicacaoIa = null
         aCarregarExplicacaoIa = true
         escopo.launch {
-            val resultado = repositorio.explicarMedicamentoComIa(med.nome)
+            val resultado = medicacaoRepository?.explicarMedicamentoComIa(med.nome) ?: Result.failure(Exception("Serviço indisponível no momento."))
             resultado.onSuccess { explicacao ->
                 textoExplicacaoIa = explicacao
             }.onFailure { erro ->
@@ -194,9 +206,11 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
         .map { it.principioAtivo.trim().lowercase() }
         .distinct()
 
+    val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
+
     // Sincronização automática com os alarmes programados do telemóvel para todos os horários
-    LaunchedEffect(repositorio.agendaEAlarmesAtivos, medicamentos) {
-        if (repositorio.agendaEAlarmesAtivos) {
+    LaunchedEffect(agendaAtiva, medicamentos) {
+        if (agendaAtiva) {
             medicamentos.filter { it.ativo }.forEach { med ->
                 med.listaHorarios.forEachIndexed { idx, horaStr ->
                     val partes = horaStr.split(":")
@@ -247,8 +261,8 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
     val estadoLista = rememberLazyListState()
 
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (repositorio.modoCuidador) "Medicação · ${perfil.nome}" else "Medicação"
-        val subtituloEcra = if (repositorio.modoCuidador) "Conta de ${perfil.nome} (Modo Cuidador)" else "Gestor visual e alarmes"
+        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Medicação · ${perfil.nome}" else "Medicação"
+        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Gestor visual e alarmes"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
 
         PullToRefreshBox(
@@ -256,7 +270,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             onRefresh = {
                 aAtualizar = true
                 escopo.launch {
-                    repositorio.sincronizarComFirestore()
+                    aoSincronizar?.invoke()
                     delay(500)
                     aAtualizar = false
                 }
@@ -271,7 +285,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // 1. FICHA DA CONTA CLÍNICA EM MODO CUIDADOR
-                if (repositorio.modoCuidador) {
+                if (perfilRepository?.modoCuidador == true) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -393,9 +407,9 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(if (repositorio.agendaEAlarmesAtivos) Color(0xFFDCFCE7) else Color(0xFFF1F5F9))
+                                        .background(if (agendaAtiva) Color(0xFFDCFCE7) else Color(0xFFF1F5F9))
                                         .clickable {
-                                            repositorio.atualizarAgendaEAlarmesAtivos(!repositorio.agendaEAlarmesAtivos)
+                                            configuracaoRepository?.atualizarAgendaEAlarmesAtivos(!agendaAtiva)
                                         }
                                         .padding(horizontal = 10.dp, vertical = 6.dp),
                                 ) {
@@ -403,15 +417,15 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                         Icon(
                                             Icons.Rounded.Alarm,
                                             contentDescription = null,
-                                            tint = if (repositorio.agendaEAlarmesAtivos) Color(0xFF15803D) else Atenuado,
+                                            tint = if (agendaAtiva) Color(0xFF15803D) else Atenuado,
                                             modifier = Modifier.size(15.dp),
                                         )
                                         Spacer(Modifier.width(4.dp))
                                         Text(
-                                            text = if (repositorio.agendaEAlarmesAtivos) "Alarmes Ativos" else "Alarmes Pausa",
+                                            text = if (agendaAtiva) "Alarmes Ativos" else "Alarmes Pausa",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (repositorio.agendaEAlarmesAtivos) Color(0xFF15803D) else Atenuado,
+                                            color = if (agendaAtiva) Color(0xFF15803D) else Atenuado,
                                         )
                                     }
                                 }
@@ -684,9 +698,9 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                     // SWITCH DE ATIVO / PAUSA
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Switch(
-                                            checked = medicamento.ativo && repositorio.agendaEAlarmesAtivos,
+                                            checked = medicamento.ativo && agendaAtiva,
                                             onCheckedChange = { ativo ->
-                                                repositorio.definirMedicamentoAtivo(perfil, medicamento.id, ativo)
+                                                medicacaoRepository?.definirMedicamentoAtivo(perfil, medicamento.id, ativo)
                                                 // Cancelar alarmes antigos
                                                 for (idx in 0..10) {
                                                     plataforma.cancelarAlarmeMedicacao(medicamento.id * 100L + idx)
@@ -694,8 +708,8 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                                 plataforma.cancelarAlarmeMedicacao(medicamento.id)
 
                                                 if (ativo) {
-                                                    if (!repositorio.agendaEAlarmesAtivos) {
-                                                        repositorio.atualizarAgendaEAlarmesAtivos(true)
+                                                    if (!agendaAtiva) {
+                                                        configuracaoRepository?.atualizarAgendaEAlarmesAtivos(true)
                                                     }
                                                     medicamento.listaHorarios.forEachIndexed { idx, hStr ->
                                                         val partes = hStr.split(":")
@@ -940,7 +954,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                     medicamentos.filter { it.ativo }.forEach { m ->
                                         appendLine("• ${m.nome} — ${m.frequenciaFormatada} (${m.listaHorarios.joinToString(", ")}) [${m.finalidade} · Princípio: ${m.principioAtivo}]")
                                     }
-                                    val prods = repositorio.produtos(perfil)
+                                    val prods = notaRepository?.produtos(perfil) ?: perfil.outrosProdutos
                                     if (prods.isNotEmpty()) {
                                         appendLine("\nSuplementos e Ervanária:")
                                         prods.forEach { appendLine("• $it") }
@@ -959,7 +973,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
 
                     OutlinedButton(
                         onClick = {
-                            val (uri, nome) = plataforma.gerarEGuardarPdfMedicacao(perfil, medicamentos, repositorio.produtos(perfil))
+                            val (uri, nome) = plataforma.gerarEGuardarPdfMedicacao(perfil, medicamentos, notaRepository?.produtos(perfil) ?: perfil.outrosProdutos)
                             if (uri != null) {
                                 pdfGeradoUri = uri
                                 pdfNomeFicheiro = nome
@@ -980,7 +994,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
 
                 // 6. OUTROS PRODUTOS & SUPLEMENTOS NATURAIS (LAYOUT LIMPO SEM ESPAÇOS MORTOS)
                 item {
-                    val produtos = repositorio.produtos(perfil)
+                    val produtos = notaRepository?.produtos(perfil) ?: perfil.outrosProdutos
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
@@ -1096,7 +1110,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                                 )
                                             }
                                             IconButton(
-                                                onClick = { repositorio.apagarProduto(perfil, produto) },
+                                                onClick = { notaRepository?.apagarProduto(perfil, produto) },
                                                 modifier = Modifier.size(30.dp),
                                             ) {
                                                 Icon(Icons.Rounded.Close, "Remover $produto", tint = Atenuado, modifier = Modifier.size(16.dp))
@@ -1113,7 +1127,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Atenuado,
                                     fontWeight = FontWeight.SemiBold,
-                                )
+                                    )
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1127,7 +1141,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(8.dp))
                                                     .background(Superficie2)
-                                                    .clickable { repositorio.adicionarProduto(perfil, sugestao) }
+                                                    .clickable { notaRepository?.adicionarProduto(perfil, sugestao) }
                                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                             ) {
                                                 Text("+ $sugestao", style = MaterialTheme.typography.labelSmall, color = MarcaMedio, fontWeight = FontWeight.Bold)
@@ -1153,7 +1167,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                                 Button(
                                     onClick = {
                                         if (rascunhoProduto.isNotBlank()) {
-                                            repositorio.adicionarProduto(perfil, rascunhoProduto.trim())
+                                            notaRepository?.adicionarProduto(perfil, rascunhoProduto.trim())
                                             rascunhoProduto = ""
                                         }
                                     },
@@ -1199,8 +1213,8 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             aoGuardar = { medSalvo ->
                 if (medicamentoEmEdicao == null) {
                     // Adicionar novo
-                    repositorio.adicionarMedicamento(perfil, medSalvo)
-                    if (repositorio.agendaEAlarmesAtivos) {
+                    medicacaoRepository?.adicionarMedicamento(perfil, medSalvo)
+                    if (agendaAtiva) {
                         medSalvo.listaHorarios.forEachIndexed { idx, horaStr ->
                             val partes = horaStr.split(":")
                             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
@@ -1212,12 +1226,12 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                     }
                 } else {
                     // Atualizar existente
-                    repositorio.atualizarMedicamento(perfil, medSalvo)
+                    medicacaoRepository?.atualizarMedicamento(perfil, medSalvo)
                     for (idx in 0..10) {
                         plataforma.cancelarAlarmeMedicacao(medSalvo.id * 100L + idx)
                     }
                     plataforma.cancelarAlarmeMedicacao(medSalvo.id)
-                    if (medSalvo.ativo && repositorio.agendaEAlarmesAtivos) {
+                    if (medSalvo.ativo && agendaAtiva) {
                         medSalvo.listaHorarios.forEachIndexed { idx, horaStr ->
                             val partes = horaStr.split(":")
                             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
@@ -1252,7 +1266,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
                             plataforma.cancelarAlarmeMedicacao(medicamento.id * 100L + idx)
                         }
                         plataforma.cancelarAlarmeMedicacao(medicamento.id, "Tomar ${medicamento.nome}")
-                        repositorio.apagarMedicamento(perfil, medicamento.id)
+                        medicacaoRepository?.apagarMedicamento(perfil, medicamento.id)
                         pendenteApagar = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -1300,7 +1314,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             idMedicamento = med.id,
             aoDispensar = { medicamentoParaFoto = null },
             aoFotoProcessada = { base64 ->
-                repositorio.atualizarFotoMedicamento(perfil, med.id, base64)
+                medicacaoRepository?.atualizarFotoMedicamento(perfil, med.id, base64)
                 medicamentoParaFoto = null
                 Toast.makeText(contexto, "Fotografia guardada com sucesso!", Toast.LENGTH_SHORT).show()
             },
@@ -1320,7 +1334,7 @@ fun EcraMedicacao(perfil: Perfil, repositorio: RepositorioApp, plataforma: Servi
             confirmButton = {
                 Button(
                     onClick = {
-                        repositorio.atualizarFotoMedicamento(perfil, med.id, null)
+                        medicacaoRepository?.atualizarFotoMedicamento(perfil, med.id, null)
                         ProcessadorImagem.apagarFotoLocal(contexto, med.id)
                         confirmarRemoverFotoMed = null
                         medicamentoParaVerFoto = null
@@ -2296,9 +2310,34 @@ fun PreVisualizacaoEcraMedicacao() {
         numeroUtente = "189 423 761",
         tipoSanguineo = "A+",
         alergias = "Sem alergias",
+        medicamentos = listOf(
+            Medicamento(
+                id = 1L,
+                nome = "Ben-u-ron 1000mg",
+                finalidade = "Alívio da dor e febre",
+                principioAtivo = "Paracetamol",
+                hora = "08:00, 20:00",
+                cor = 0xFF2563EB,
+                ativo = true,
+                laboratorio = "Bene Farmacêutica",
+            ),
+            Medicamento(
+                id = 2L,
+                nome = "Sinvastatina 20mg",
+                finalidade = "Controlo do colesterol",
+                principioAtivo = "Sinvastatina",
+                hora = "21:00",
+                cor = 0xFF10B981,
+                ativo = true,
+                laboratorio = "Generis",
+            ),
+        ),
+        outrosProdutos = listOf("Magnésio Supremo", "Chá de Camomila"),
     )
-    val contexto = LocalContext.current
     TemaPonteSaude(textoGrande = false) {
-        EcraMedicacao(perfil = perfil, repositorio = remember { RepositorioApp(contexto) }, plataforma = ServicosDispositivo(null))
+        EcraMedicacao(
+            perfil = perfil,
+            plataforma = ServicosDispositivo(null),
+        )
     }
 }
