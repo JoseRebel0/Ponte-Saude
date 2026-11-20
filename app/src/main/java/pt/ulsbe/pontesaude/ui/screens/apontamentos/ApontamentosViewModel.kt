@@ -29,6 +29,7 @@ data class ApontamentosUiState(
     val notas: List<Nota> = emptyList(),
     val produtos: List<String> = emptyList(),
     val explicacaoIa: String? = null,
+    val termoIa: String? = null,
     val aCarregarIa: Boolean = false,
     val mensagemErro: String? = null,
     val mensagemSucesso: String? = null,
@@ -55,9 +56,11 @@ class ApontamentosViewModel(
 
     /**
      * Recarrega a lista de notas e produtos do perfil ativo a partir do repositório.
+     * Limpa respostas residuais de IA se o perfil ativo tiver mudado.
      */
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
+        val perfilMudou = _uiState.value.perfil?.id != perfil.id
         val notas = notaRepository.notas(perfil)
         val produtos = notaRepository.produtos(perfil)
         _uiState.update {
@@ -65,8 +68,26 @@ class ApontamentosViewModel(
                 perfil = perfil,
                 notas = notas,
                 produtos = produtos,
+                explicacaoIa = if (perfilMudou) null else it.explicacaoIa,
+                termoIa = if (perfilMudou) null else it.termoIa,
+                aCarregarIa = if (perfilMudou) false else it.aCarregarIa,
+                mensagemErro = if (perfilMudou) null else it.mensagemErro,
             )
         }
+    }
+
+    /**
+     * Limpa a explicação clínica da IA atualmente em exibição.
+     */
+    fun limparExplicacaoIa() {
+        _uiState.update { it.copy(explicacaoIa = null, termoIa = null, aCarregarIa = false, mensagemErro = null) }
+    }
+
+    /**
+     * Marca a explicação atual como já consumida/guardada no histórico do perfil ativo.
+     */
+    fun consumirExplicacaoIa() {
+        _uiState.update { it.copy(termoIa = null) }
     }
 
     /**
@@ -116,18 +137,32 @@ class ApontamentosViewModel(
      * Traduz e simplifica um termo médico ou diagnóstico através da IA (Gemini).
      */
     fun traduzirTermo(termo: String) {
-        if (termo.isBlank() || saudeRepository == null) return
-        _uiState.update { it.copy(aCarregarIa = true, explicacaoIa = null, mensagemErro = null) }
+        val termoLimpo = termo.trim()
+        if (termoLimpo.isBlank() || saudeRepository == null) return
+        val perfilOrigem = perfilRepository.perfilAtivo
+        _uiState.update {
+            it.copy(
+                aCarregarIa = true,
+                explicacaoIa = null,
+                termoIa = termoLimpo,
+                mensagemErro = null,
+                perfil = perfilOrigem,
+            )
+        }
         viewModelScope.launch {
-            val res = saudeRepository.explicarTermoMedicoComIa(termo)
+            val res = saudeRepository.explicarTermoMedicoComIa(termoLimpo)
             res.onSuccess { explicacao ->
-                _uiState.update { it.copy(aCarregarIa = false, explicacaoIa = explicacao) }
+                if (perfilRepository.perfilAtivo.id == perfilOrigem.id) {
+                    _uiState.update { it.copy(aCarregarIa = false, explicacaoIa = explicacao) }
+                }
             }.onFailure { erro ->
-                _uiState.update {
-                    it.copy(
-                        aCarregarIa = false,
-                        mensagemErro = "Erro ao simplificar termo: ${erro.localizedMessage}",
-                    )
+                if (perfilRepository.perfilAtivo.id == perfilOrigem.id) {
+                    _uiState.update {
+                        it.copy(
+                            aCarregarIa = false,
+                            mensagemErro = "Erro ao simplificar termo: ${erro.localizedMessage}",
+                        )
+                    }
                 }
             }
         }
