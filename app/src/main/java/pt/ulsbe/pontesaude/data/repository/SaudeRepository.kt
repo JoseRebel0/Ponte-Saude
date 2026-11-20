@@ -44,6 +44,9 @@ class SaudeRepository(
     var pontosSeguranca by mutableIntStateOf(preferencias.getInt("pontos_seguranca", 50))
         private set
 
+    var pontosTotais by mutableIntStateOf(preferencias.getInt("pontos_totais", 50))
+        private set
+
     val modulosConcluidos = mutableStateListOf<String>()
     val modulosOuvidos = mutableStateListOf<String>()
     val videosAssistidos = mutableStateListOf<String>()
@@ -58,6 +61,8 @@ class SaudeRepository(
         modulosOuvidos.addAll(preferencias.getStringSet("listened_modules", emptySet()).orEmpty())
         videosAssistidos.addAll(preferencias.getStringSet("watched_videos", emptySet()).orEmpty())
         vouchersResgatados.addAll(lerVouchers())
+        val pontosUsadosVouchers = vouchersResgatados.sumOf { it.pontosUsados }
+        pontosTotais = maxOf(preferencias.getInt("pontos_totais", 0), pontosSeguranca + pontosUsadosVouchers)
         carregarCatalogoLocal()
         sincronizarCatalogoFirestore()
     }
@@ -70,8 +75,13 @@ class SaudeRepository(
         videos: List<String>,
         vouchers: List<VoucherResgatado>,
     ) {
+        val pontosUsadosVouchers = vouchers.sumOf { it.pontosUsados }
+        val guardadosTotais = preferencias.getInt(chavePerfil("pontos_totais", idPerfil), 0)
+        val total = maxOf(guardadosTotais, pontos + pontosUsadosVouchers)
+
         preferencias.edit()
             .putInt(chavePerfil("pontos_seguranca", idPerfil), pontos)
+            .putInt(chavePerfil("pontos_totais", idPerfil), total)
             .putStringSet(chavePerfil("completed_modules", idPerfil), concluidos.toSet())
             .putStringSet(chavePerfil("listened_modules", idPerfil), ouvidos.toSet())
             .putStringSet(chavePerfil("watched_videos", idPerfil), videos.toSet())
@@ -88,7 +98,11 @@ class SaudeRepository(
         videosAssistidos.clear()
         videosAssistidos.addAll(preferencias.getStringSet(chavePerfil("watched_videos", idPerfil), emptySet()).orEmpty())
         vouchersResgatados.clear()
-        vouchersResgatados.addAll(lerVouchers(idPerfil))
+        val vouchers = lerVouchers(idPerfil)
+        vouchersResgatados.addAll(vouchers)
+        val pontosUsadosVouchers = vouchers.sumOf { it.pontosUsados }
+        val guardadosTotais = preferencias.getInt(chavePerfil("pontos_totais", idPerfil), 0)
+        pontosTotais = maxOf(guardadosTotais, pontosSeguranca + pontosUsadosVouchers)
     }
 
     private fun chavePerfil(chaveBase: String, idPerfil: String = ""): String =
@@ -186,6 +200,10 @@ class SaudeRepository(
 
     fun adicionarPontos(quantidade: Int, idPerfil: String = "") {
         pontosSeguranca = (pontosSeguranca + quantidade).coerceAtLeast(0)
+        if (quantidade > 0) {
+            pontosTotais += quantidade
+            preferencias.edit().putInt(chavePerfil("pontos_totais", idPerfil), pontosTotais).apply()
+        }
         preferencias.edit().putInt(chavePerfil("pontos_seguranca", idPerfil), pontosSeguranca).apply()
     }
 

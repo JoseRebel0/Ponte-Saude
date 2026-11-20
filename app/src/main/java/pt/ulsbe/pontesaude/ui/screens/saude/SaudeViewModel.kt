@@ -35,6 +35,7 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
 data class SaudeUiState(
     val perfil: Perfil? = null,
     val pontosSeguranca: Int = 50,
+    val pontosTotais: Int = 50,
     val modulosConcluidos: List<String> = emptyList(),
     val modulosOuvidos: List<String> = emptyList(),
     val videosAssistidos: List<String> = emptyList(),
@@ -80,6 +81,7 @@ class SaudeViewModel(
             it.copy(
                 perfil = perfil,
                 pontosSeguranca = saudeRepository.pontosSeguranca,
+                pontosTotais = saudeRepository.pontosTotais,
                 modulosConcluidos = saudeRepository.modulosConcluidos.toList(),
                 modulosOuvidos = saudeRepository.modulosOuvidos.toList(),
                 videosAssistidos = saudeRepository.videosAssistidos.toList(),

@@ -845,32 +845,6 @@ fun EcraMedicacao(
                                     }
                                 }
 
-                                // BOTÃO ADICIONAR FOTO DA CAIXA (quando ainda não tem)
-                                if (bitmap == null) {
-                                    OutlinedButton(
-                                        onClick = { medicamentoParaFoto = medicamento },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = MarcaMedio,
-                                        ),
-                                        border = BorderStroke(1.dp, MarcaMedio.copy(alpha = 0.35f)),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.AddAPhoto,
-                                            contentDescription = null,
-                                            tint = MarcaMedio,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            "Adicionar foto da caixa",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                    }
-                                }
 
                                 // BOTÃO EXPLICAR COM IA
                                 Button(
@@ -958,7 +932,10 @@ fun EcraMedicacao(
 
             // 5. BOTÕES PRINCIPAIS: ADICIONAR MEDICAMENTO + PARTILHAR LISTA
             item {
-                Box(Modifier.padding(horizontal = 20.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1003,8 +980,6 @@ fun EcraMedicacao(
                             Icon(Icons.Rounded.Share, "Partilhar lista com médico ou farmácia")
                         }
                     }
-
-                    Spacer(Modifier.height(10.dp))
 
                     OutlinedButton(
                         onClick = {

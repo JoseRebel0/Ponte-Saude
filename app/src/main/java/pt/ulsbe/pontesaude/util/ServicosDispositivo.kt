@@ -22,6 +22,7 @@ import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -65,7 +66,11 @@ class ServicosDispositivo(context: Context?) {
 
     init {
         criarCanaisNotificacoes()
-        if (contextoApp != null) {
+        inicializarTts()
+    }
+
+    private fun inicializarTts() {
+        if (contextoApp != null && sintetizadorVoz == null) {
             runCatching {
                 sintetizadorVoz = TextToSpeech(contextoApp) { estado ->
                     pronto = estado == TextToSpeech.SUCCESS
@@ -76,16 +81,44 @@ class ServicosDispositivo(context: Context?) {
                             val ptFallback = Locale("pt", "PT")
                             val resFallback = sintetizadorVoz?.setLanguage(ptFallback)
                             if (resFallback == TextToSpeech.LANG_MISSING_DATA || resFallback == TextToSpeech.LANG_NOT_SUPPORTED) {
-                                sintetizadorVoz?.setLanguage(Locale("pt"))
+                                val ptGeral = sintetizadorVoz?.setLanguage(Locale("pt"))
+                                if (ptGeral == TextToSpeech.LANG_MISSING_DATA || ptGeral == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                    sintetizadorVoz?.setLanguage(Locale.getDefault())
+                                }
                             }
                         }
-                        sintetizadorVoz?.setSpeechRate(0.9f)
-                        falaPendente?.let { fala ->
-                            falar(fala)
-                            falaPendente = null
+                        sintetizadorVoz?.setPitch(1.0f)
+                        sintetizadorVoz?.setSpeechRate(0.92f)
+                        selecionarMelhorVozNatural()
+                        val pendente = falaPendente
+                        falaPendente = null
+                        if (!pendente.isNullOrBlank()) {
+                            falar(pendente)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun selecionarMelhorVozNatural() {
+        val tts = sintetizadorVoz ?: return
+        runCatching {
+            val vozesDisponiveis = tts.voices.orEmpty()
+            // Filtra vozes instaladas para a língua portuguesa
+            val vozesPt = vozesDisponiveis.filter { voz ->
+                voz.locale.language == "pt" && !voz.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+            }
+
+            // Prioriza português de Portugal (PT), qualidade muito alta/alta, e vozes neurais/suaves
+            val melhorVoz = vozesPt.sortedWith(
+                compareByDescending<Voice> { it.locale.country.equals("PT", ignoreCase = true) }
+                    .thenByDescending { it.quality }
+                    .thenBy { it.name.contains("network", ignoreCase = true) }
+            ).firstOrNull()
+
+            if (melhorVoz != null) {
+                tts.voice = melhorVoz
             }
         }
     }
@@ -615,11 +648,14 @@ class ServicosDispositivo(context: Context?) {
     }
 
     fun falar(texto: String) {
-        val prefs = contextoApp?.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
-        val somVozAtivo = prefs?.getBoolean("som_voz_ativo", false) ?: false
-        if (!somVozAtivo) return
+        if (texto.isBlank()) return
+
+        if (sintetizadorVoz == null && contextoApp != null) {
+            inicializarTts()
+        }
 
         if (pronto && sintetizadorVoz != null) {
+            selecionarMelhorVozNatural()
             sintetizadorVoz?.stop()
             sintetizadorVoz?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "ponte-saude")
         } else {

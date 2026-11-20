@@ -236,9 +236,10 @@ fun EcraSaude(
 
             // PROGRAMA DE LITERACIA & SEGURANÇA (HUD POLIDO E EQUILIBRADO)
             item {
-                val pontos = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
-                val infoNivel = calcularNivelSeguranca(pontos)
+                val pontosSaldo = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
                 val vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty()
+                val pontosTotais = uiState?.pontosTotais ?: saudeRepository?.pontosTotais ?: (pontosSaldo + vouchers.sumOf { it.pontosUsados })
+                val infoNivel = calcularNivelSeguranca(pontosTotais)
 
                 Box(Modifier.padding(horizontal = 20.dp)) {
                     Card(
@@ -334,7 +335,7 @@ fun EcraSaude(
                                     )
                                     Row(verticalAlignment = Alignment.Bottom) {
                                         Text(
-                                            text = "$pontos",
+                                            text = "$pontosSaldo",
                                             fontSize = 28.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = MarcaMedio,
@@ -377,7 +378,7 @@ fun EcraSaude(
                                         color = Atenuado,
                                     )
                                     Text(
-                                        text = "$pontos / ${infoNivel.pontosProximoNivel} pts",
+                                        text = if (infoNivel.nivel >= 4) "$pontosTotais pts (Nível Máximo)" else "$pontosTotais / ${infoNivel.pontosProximoNivel} pts",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Atenuado,
