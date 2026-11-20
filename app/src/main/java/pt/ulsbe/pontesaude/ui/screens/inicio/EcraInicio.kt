@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,41 +79,59 @@ private data class Atalho(val rotulo: String, val icone: ImageVector, val acao: 
 @Composable
 fun EcraInicio(
     perfil: Perfil,
+    viewModel: InicioViewModel? = null,
     perfilRepository: PerfilRepository? = null,
     configuracaoRepository: ConfiguracaoRepository? = null,
     aoSincronizar: (suspend () -> Unit)? = null,
     plataforma: ServicosDispositivo,
     navegarPara: (SeparadorApp) -> Unit,
 ) {
-    val proxima = perfil.consultas.firstOrNull()
-    var aAtualizar by remember { mutableStateOf(false) }
-    var timestampLocal by remember { mutableStateOf(configuracaoRepository?.timestampUltimaAtualizacao ?: System.currentTimeMillis()) }
+    val uiState = viewModel?.uiState?.collectAsState()?.value
+    val temInternet = plataforma.temConexaoInternet()
+    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil ?: perfil else perfil
+    val proxima = if (uiState != null && uiState.perfil?.id == perfil.id) {
+        uiState.proximaConsulta ?: perfilAtivo.consultas.firstOrNull()
+    } else {
+        perfil.consultas.firstOrNull()
+    }
+    LaunchedEffect(perfil.id) {
+        viewModel?.atualizarEstado()
+    }
+
+    var aAtualizarLocal by remember { mutableStateOf(false) }
+    val aAtualizar = uiState?.emCarregamento ?: aAtualizarLocal
+    val textoAtualizacao = uiState?.ultimaAtualizacaoFormatada
+        ?: configuracaoRepository?.formatarUltimaAtualizacao()
+        ?: "Hoje às 10:00"
+
     val escopo = rememberCoroutineScope()
 
-    val textoAtualizacao = configuracaoRepository?.formatarUltimaAtualizacao() ?: formatarMomentoAtualizacao(timestampLocal)
-    val temInternet = plataforma.temConexaoInternet()
-
     fun dispararAtualizacao() {
-        if (aAtualizar) return
-        aAtualizar = true
-        escopo.launch {
-            delay(600) // Transição suave de carregamento
-            val online = plataforma.temConexaoInternet()
-            if (online) {
+        if (viewModel != null) {
+            viewModel.dispararAtualizacao(aoSincronizar)
+        } else {
+            if (aAtualizarLocal) return
+            aAtualizarLocal = true
+            escopo.launch {
+                delay(600)
                 aoSincronizar?.invoke()
-                timestampLocal = System.currentTimeMillis()
+                aAtualizarLocal = false
             }
-            aAtualizar = false
         }
     }
 
-    // Atualização automática sempre que se entra na aplicação
     LaunchedEffect(Unit) {
-        dispararAtualizacao()
+        if (viewModel != null) {
+            viewModel.atualizarEstado()
+        } else {
+            dispararAtualizacao()
+        }
     }
 
     val atalhos = listOf(
-        Atalho("Linha SNS 24", Icons.Rounded.HeadsetMic) { plataforma.marcarNumero("808242424") },
+        Atalho("Linha SNS 24", Icons.Rounded.HeadsetMic) {
+            viewModel?.ligarSaude24(plataforma) ?: plataforma.marcarNumero("808242424")
+        },
         Atalho("Receitas", Icons.AutoMirrored.Rounded.ReceiptLong) { navegarPara(SeparadorApp.MEDICACAO) },
         Atalho("Consultas/Exames", Icons.Rounded.CalendarMonth) { navegarPara(SeparadorApp.CONSULTAS) },
         Atalho("Segurança do Utente", Icons.Rounded.Favorite) { navegarPara(SeparadorApp.SAUDE) },
@@ -154,13 +173,13 @@ fun EcraInicio(
                     ) {
                         Text("CARTÃO DE EMERGÊNCIA", color = Color.White.copy(alpha = .76f), style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.height(12.dp))
-                        Text(perfil.nome, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(perfilAtivo.nome, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(18.dp))
-                        CampoEmergencia("Nº Nacional de Saúde (SNS)", perfil.numeroUtente)
+                        CampoEmergencia("Nº Nacional de Saúde (SNS)", perfilAtivo.numeroUtente)
                         Spacer(Modifier.height(14.dp))
                         Row(Modifier.fillMaxWidth()) {
-                            CampoEmergencia("Tipo sanguíneo", perfil.tipoSanguineo, Modifier.weight(1f))
-                            CampoEmergencia("Alergias", perfil.alergias, Modifier.weight(1f))
+                            CampoEmergencia("Tipo sanguíneo", perfilAtivo.tipoSanguineo, Modifier.weight(1f))
+                            CampoEmergencia("Alergias", perfilAtivo.alergias, Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(14.dp))
                         Row(
@@ -247,8 +266,12 @@ fun EcraInicio(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        BotaoTelefone("SNS 24", MarcaMedio, Modifier.weight(1f)) { plataforma.marcarNumero("808242424") }
-                        BotaoTelefone("112", Color(0xFFDC2626), Modifier.weight(1f)) { plataforma.marcarNumero("112") }
+                        BotaoTelefone("SNS 24", MarcaMedio, Modifier.weight(1f)) {
+                            viewModel?.ligarSaude24(plataforma) ?: plataforma.marcarNumero("808242424")
+                        }
+                        BotaoTelefone("112", Color(0xFFDC2626), Modifier.weight(1f)) {
+                            viewModel?.ligarSOS(plataforma) ?: plataforma.marcarNumero("112")
+                        }
                     }
                 }
             }

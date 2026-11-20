@@ -60,6 +60,35 @@ class SaudeRepository(
         carregarCatalogoLocal()
     }
 
+    fun guardarDadosPerfilEmMemoria(
+        idPerfil: String,
+        pontos: Int,
+        concluidos: List<String>,
+        ouvidos: List<String>,
+        videos: List<String>,
+        vouchers: List<VoucherResgatado>,
+    ) {
+        preferencias.edit()
+            .putInt(chavePerfil("pontos_seguranca", idPerfil), pontos)
+            .putStringSet(chavePerfil("completed_modules", idPerfil), concluidos.toSet())
+            .putStringSet(chavePerfil("listened_modules", idPerfil), ouvidos.toSet())
+            .putStringSet(chavePerfil("watched_videos", idPerfil), videos.toSet())
+            .putString(chavePerfil("vouchers_resgatados", idPerfil), vouchers.serializarVouchers())
+            .apply()
+    }
+
+    fun carregarDadosPerfil(idPerfil: String) {
+        pontosSeguranca = preferencias.getInt(chavePerfil("pontos_seguranca", idPerfil), 50)
+        modulosConcluidos.clear()
+        modulosConcluidos.addAll(preferencias.getStringSet(chavePerfil("completed_modules", idPerfil), emptySet()).orEmpty())
+        modulosOuvidos.clear()
+        modulosOuvidos.addAll(preferencias.getStringSet(chavePerfil("listened_modules", idPerfil), emptySet()).orEmpty())
+        videosAssistidos.clear()
+        videosAssistidos.addAll(preferencias.getStringSet(chavePerfil("watched_videos", idPerfil), emptySet()).orEmpty())
+        vouchersResgatados.clear()
+        vouchersResgatados.addAll(lerVouchers(idPerfil))
+    }
+
     private fun chavePerfil(chaveBase: String, idPerfil: String = ""): String =
         if (idPerfil.isBlank()) chaveBase else "${chaveBase}_$idPerfil"
 

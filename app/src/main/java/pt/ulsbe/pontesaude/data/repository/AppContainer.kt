@@ -2,6 +2,7 @@ package pt.ulsbe.pontesaude.data.repository
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +40,8 @@ class AppContainer(context: Context) {
     var estadoSincronizacaoFirestore by mutableStateOf("Sincronização automática ativa")
         private set
     var estaASincronizarFirestore by mutableStateOf(false)
+        private set
+    var versaoSincronizacao by mutableIntStateOf(0)
         private set
 
     val configuracao = ConfiguracaoRepository(context)
@@ -108,23 +111,43 @@ class AppContainer(context: Context) {
     }
 
     suspend fun sincronizarComFirestore() {
-        val remotos = clienteFirestore.carregarTodosOsPerfis().getOrNull()?.map { it.perfil }.orEmpty()
-        if (remotos.isNotEmpty()) {
+        val remotosCompletos = clienteFirestore.carregarTodosOsPerfis().getOrNull().orEmpty()
+        if (remotosCompletos.isNotEmpty()) {
+            val remotos = remotosCompletos.map { it.perfil }
             withContext(Dispatchers.Main) {
                 perfil.todosOsPerfis.clear()
                 perfil.todosOsPerfis.addAll(remotos)
                 perfil.atualizarListaPessoasCuidadas()
 
-                for (p in remotos) {
+                for (item in remotosCompletos) {
+                    val p = item.perfil
                     medicacao.atualizarListaEmMemoria(p.id, p.medicamentos)
                     consultas.atualizarListaEmMemoria(p.id, p.consultas)
                     notas.atualizarNotasEmMemoria(p.id, p.notas)
                     notas.atualizarProdutosEmMemoria(p.id, p.outrosProdutos)
+                    saude.guardarDadosPerfilEmMemoria(
+                        idPerfil = p.id,
+                        pontos = item.pontosSeguranca,
+                        concluidos = item.modulosConcluidos,
+                        ouvidos = item.modulosOuvidos,
+                        videos = item.videosAssistidos,
+                        vouchers = item.vouchersResgatados,
+                    )
 
-                    dbLocal.perfilDao().inserirOuAtualizar(p.paraEntidade(saude.pontosSeguranca, emptyList(), emptyList(), emptyList(), emptyList(), false))
+                    dbLocal.perfilDao().inserirOuAtualizar(
+                        p.paraEntidade(
+                            item.pontosSeguranca,
+                            item.modulosConcluidos,
+                            item.modulosOuvidos,
+                            item.videosAssistidos,
+                            item.vouchersResgatados,
+                            false,
+                        ),
+                    )
                     dbLocal.medicamentoDao().inserirVarios(p.medicamentos.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
                     dbLocal.consultaDao().inserirVarios(p.consultas.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
                 }
+                versaoSincronizacao++
             }
         }
 

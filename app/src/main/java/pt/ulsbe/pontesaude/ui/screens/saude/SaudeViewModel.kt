@@ -74,6 +74,7 @@ class SaudeViewModel(
      */
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
+        saudeRepository.carregarDadosPerfil(perfil.id)
         _uiState.update {
             it.copy(
                 perfil = perfil,

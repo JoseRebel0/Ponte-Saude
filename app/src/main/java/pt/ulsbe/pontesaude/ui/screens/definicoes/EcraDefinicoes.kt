@@ -45,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,11 +80,13 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 @Composable
 fun EcraDefinicoes(
     perfil: Perfil,
+    viewModel: DefinicoesViewModel? = null,
     configuracaoRepository: ConfiguracaoRepository? = null,
     perfilRepository: PerfilRepository? = null,
     medicacaoRepository: MedicacaoRepository? = null,
     plataforma: ServicosDispositivo? = null,
 ) {
+    val uiState = viewModel?.uiState?.collectAsState()?.value
     var mensagemTeste by remember { mutableStateOf<String?>(null) }
 
     val lancadorPermissao = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { concedida ->
@@ -120,8 +123,8 @@ fun EcraDefinicoes(
                             Icons.Rounded.TextFields,
                             "Texto maior",
                             "Aumenta o texto em toda a aplicação",
-                            configuracaoRepository?.textoGrande ?: false,
-                            aoMudarSelecao = { configuracaoRepository?.atualizarTextoGrande(it) },
+                            uiState?.textoGrande ?: configuracaoRepository?.textoGrande ?: false,
+                            aoMudarSelecao = { viewModel?.definirTextoGrande(it) ?: configuracaoRepository?.atualizarTextoGrande(it) },
                         )
                         HorizontalDivider(color = Superficie2)
                         if (perfilRepository != null) {
@@ -132,17 +135,17 @@ fun EcraDefinicoes(
                             Icons.Rounded.AccessibilityNew,
                             "Reduzir animações",
                             "Diminui movimentos e transições na aplicação",
-                            configuracaoRepository?.reduzirMovimento ?: false,
-                            aoMudarSelecao = { configuracaoRepository?.atualizarReduzirMovimento(it) },
+                            uiState?.reduzirMovimento ?: configuracaoRepository?.reduzirMovimento ?: false,
+                            aoMudarSelecao = { viewModel?.definirReduzirMovimento(it) ?: configuracaoRepository?.atualizarReduzirMovimento(it) },
                         )
                         HorizontalDivider(color = Superficie2)
                         LinhaDefinicao(
                             Icons.Rounded.NotificationsActive,
                             "Notificações da aplicação",
                             "Avisos automáticos de medicação, consultas e clube de segurança",
-                            configuracaoRepository?.notificacoesAtivas ?: true,
+                            uiState?.notificacoesAtivas ?: configuracaoRepository?.notificacoesAtivas ?: true,
                             aoMudarSelecao = { ativas: Boolean ->
-                                configuracaoRepository?.atualizarNotificacoesAtivas(ativas)
+                                if (viewModel != null) viewModel.definirNotificacoes(ativas) else configuracaoRepository?.atualizarNotificacoesAtivas(ativas)
                                 if (!ativas) {
                                     plataforma?.cancelarTodasNotificacoes()
                                 }
@@ -256,8 +259,9 @@ fun EcraDefinicoes(
                             Icons.Rounded.CalendarMonth,
                             "Agenda e Alarmes do Telemóvel",
                             "Sincroniza automaticamente consultas na agenda e medicação no despertador",
-                            configuracaoRepository?.agendaEAlarmesAtivos ?: true,
+                            uiState?.agendaEAlarmesAtivos ?: configuracaoRepository?.agendaEAlarmesAtivos ?: true,
                             aoMudarSelecao = { ativos: Boolean ->
+                                if (viewModel != null) viewModel.definirAgendaEAlarmes(ativos, plataforma) else {
                                 configuracaoRepository?.atualizarAgendaEAlarmesAtivos(ativos)
                                 if (!ativos) {
                                     val meds = medicacaoRepository?.medicamentos(perfil).orEmpty()
@@ -281,7 +285,8 @@ fun EcraDefinicoes(
                                     }
                                     plataforma?.sincronizarConsultasNoCalendario(perfil.consultas)
                                 }
-                            },
+                            }
+                        },
                         )
                         if (configuracaoRepository?.agendaEAlarmesAtivos == false) {
                             Text(
@@ -370,7 +375,7 @@ fun EcraDefinicoes(
                         Spacer(Modifier.height(4.dp))
 
                         Button(
-                            onClick = { perfilRepository?.terminarSessaoCMD() },
+                            onClick = { viewModel?.terminarSessaoCMD() ?: perfilRepository?.terminarSessaoCMD() },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(

@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
@@ -54,6 +55,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -135,20 +138,60 @@ private fun guardarHistoricoIa(context: Context, idPerfil: String, lista: List<I
 @Composable
 fun EcraApontamentos(
     perfil: Perfil,
+    viewModel: ApontamentosViewModel? = null,
     notaRepository: NotaRepository? = null,
     saudeRepository: SaudeRepository? = null,
     perfilRepository: PerfilRepository? = null,
     configuracaoRepository: ConfiguracaoRepository? = null,
     plataforma: ServicosDispositivo,
 ) {
+    val uiState = viewModel?.uiState?.collectAsState()?.value
     val contexto = LocalContext.current
-    var consultaTradutor by remember { mutableStateOf("") }
-    var explicacaoTradutor by remember { mutableStateOf<String?>(null) }
-    var aProcessarIa by remember { mutableStateOf(false) }
-    var avisoSemInternet by remember { mutableStateOf(false) }
-    var mensagemErroIa by remember { mutableStateOf<String?>(null) }
+    var consultaTradutor by remember(perfil.id) { mutableStateOf("") }
+    var explicacaoTradutor by remember(perfil.id) { mutableStateOf<String?>(null) }
+    var aProcessarIa by remember(perfil.id) { mutableStateOf(false) }
+    var avisoSemInternet by remember(perfil.id) { mutableStateOf(false) }
+    var mensagemErroIa by remember(perfil.id) { mutableStateOf<String?>(null) }
+    val aProcessarIaEfetivo = if (uiState != null && uiState.perfil?.id == perfil.id) {
+        uiState.aCarregarIa
+    } else {
+        aProcessarIa
+    }
+    val explicacaoTradutorEfetiva = if (uiState != null && uiState.perfil?.id == perfil.id) {
+        explicacaoTradutor ?: uiState.explicacaoIa
+    } else {
+        explicacaoTradutor
+    }
+    val mensagemErroIaEfetiva = if (uiState != null && uiState.perfil?.id == perfil.id) {
+        uiState.mensagemErro ?: mensagemErroIa
+    } else {
+        mensagemErroIa
+    }
     var historicoIa by remember(perfil.id) { mutableStateOf(carregarHistoricoIa(contexto, perfil.id)) }
     var mostrarHistoricoIa by remember { mutableStateOf(false) }
+
+    LaunchedEffect(perfil.id) {
+        explicacaoTradutor = null
+        consultaTradutor = ""
+        historicoIa = carregarHistoricoIa(contexto, perfil.id)
+        viewModel?.limparExplicacaoIa()
+        viewModel?.recarregar()
+    }
+
+    LaunchedEffect(uiState?.explicacaoIa, uiState?.termoIa) {
+        val resposta = uiState?.explicacaoIa
+        val termo = uiState?.termoIa
+        if (!resposta.isNullOrBlank() && !termo.isNullOrBlank() && uiState.perfil?.id == perfil.id) {
+            explicacaoTradutor = resposta
+            val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+            val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = resposta.trim(), dataHora = dataAtual)
+            val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
+            historicoIa = listaAtualizada
+            guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
+            viewModel?.consumirExplicacaoIa()
+        }
+    }
+
     var rascunhoNota by remember(perfil.id) { mutableStateOf("") }
     var avisoNota by remember { mutableStateOf("") }
     var aAtualizar by remember { mutableStateOf(false) }
@@ -163,21 +206,26 @@ fun EcraApontamentos(
         }
         avisoSemInternet = false
         mensagemErroIa = null
-        aProcessarIa = true
-        escopo.launch {
-            val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
-            resultado.onSuccess { explicacao ->
-                explicacaoTradutor = explicacao
-                val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
-                val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
-                historicoIa = listaAtualizada
-                guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
-            }.onFailure { erro ->
-                android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
-                mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
+        explicacaoTradutor = null
+        if (viewModel != null) {
+            viewModel.traduzirTermo(termo)
+        } else {
+            aProcessarIa = true
+            escopo.launch {
+                val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
+                resultado.onSuccess { explicacao ->
+                    explicacaoTradutor = explicacao
+                    val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                    val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
+                    val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
+                    historicoIa = listaAtualizada
+                    guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
+                }.onFailure { erro ->
+                    android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
+                    mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
+                }
+                aProcessarIa = false
             }
-            aProcessarIa = false
         }
     }
 
@@ -201,8 +249,12 @@ fun EcraApontamentos(
 
     fun adicionarNotaAoRegisto(texto: String) {
         if (texto.isNotBlank()) {
-            val autorNota = if (perfilRepository?.modoCuidador == true) "Cuidador de ${perfil.nomeCurto}" else "Eu"
-            notaRepository?.adicionarNota(perfil, Nota(texto.trim(), autorNota))
+            val autorNota = "Utente"
+            if (viewModel != null) {
+                viewModel.adicionarNota(texto.trim(), autorNota)
+            } else {
+                notaRepository?.adicionarNota(perfil, Nota(texto.trim(), autorNota))
+            }
         }
     }
 
@@ -381,12 +433,12 @@ fun EcraApontamentos(
                             Spacer(Modifier.height(12.dp))
                             Button(
                                 onClick = { traduzirConsulta(consultaTradutor) },
-                                enabled = !aProcessarIa && consultaTradutor.isNotBlank(),
+                                enabled = !aProcessarIaEfetivo && consultaTradutor.isNotBlank(),
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
                             ) {
-                                if (aProcessarIa) {
+                                if (aProcessarIaEfetivo) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(22.dp),
                                         color = Color.White,
@@ -417,7 +469,7 @@ fun EcraApontamentos(
                                 }
                             }
 
-                            explicacaoTradutor?.let { texto ->
+                            explicacaoTradutorEfetiva?.let { texto ->
                                 Spacer(Modifier.height(16.dp))
                                 Column(
                                     Modifier
@@ -442,7 +494,22 @@ fun EcraApontamentos(
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MarcaClaro,
+                                            modifier = Modifier.weight(1f),
                                         )
+                                        IconButton(
+                                            onClick = {
+                                                explicacaoTradutor = null
+                                                viewModel?.limparExplicacaoIa()
+                                            },
+                                            modifier = Modifier.size(24.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Close,
+                                                contentDescription = "Fechar explicação",
+                                                tint = MarcaClaro,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     Text(
@@ -539,7 +606,7 @@ fun EcraApontamentos(
                 }
 
                 // 3. LISTA DE APONTAMENTOS REGISTADOS
-                val notas = notaRepository?.notas(perfil) ?: perfil.notas
+                val notas = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.notas else notaRepository?.notas(perfil) ?: perfil.notas
                 if (notas.isEmpty()) {
                     item {
                         Box(
@@ -568,13 +635,13 @@ fun EcraApontamentos(
                                     Text(nota.texto, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        "${nota.autor} · registo pessoal do utente",
+                                        "Utente · registo pessoal",
                                         color = Atenuado,
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
                                 IconButton(
-                                    onClick = { notaRepository?.apagarNota(perfil, indice) },
+                                    onClick = { if (viewModel != null) viewModel.apagarNota(indice) else notaRepository?.apagarNota(perfil, indice) },
                                     modifier = Modifier.size(36.dp),
                                 ) {
                                     Icon(Icons.Rounded.Delete, "Apagar nota", tint = Atenuado, modifier = Modifier.size(20.dp))
@@ -622,7 +689,7 @@ fun EcraApontamentos(
         )
     }
 
-    if (mensagemErroIa != null) {
+    if (mensagemErroIaEfetiva != null) {
         AlertDialog(
             onDismissRequest = { mensagemErroIa = null },
             icon = {
@@ -642,13 +709,16 @@ fun EcraApontamentos(
             },
             text = {
                 Text(
-                    mensagemErroIa ?: "",
+                    mensagemErroIaEfetiva ?: "",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
                 Button(
-                    onClick = { mensagemErroIa = null },
+                    onClick = {
+                        mensagemErroIa = null
+                        viewModel?.recarregar()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
                 ) {
                     Text("Fechar")
@@ -749,6 +819,22 @@ fun EcraApontamentos(
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Atenuado,
                                         )
+                                        Spacer(Modifier.width(6.dp))
+                                        IconButton(
+                                            onClick = {
+                                                val novaLista = historicoIa.filterIndexed { i, _ -> i != index }
+                                                historicoIa = novaLista
+                                                guardarHistoricoIa(contexto, perfil.id, novaLista)
+                                            },
+                                            modifier = Modifier.size(24.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Delete,
+                                                contentDescription = "Apagar pergunta do histórico",
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text(

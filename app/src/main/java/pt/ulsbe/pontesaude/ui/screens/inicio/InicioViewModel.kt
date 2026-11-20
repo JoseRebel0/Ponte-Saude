@@ -1,10 +1,14 @@
 package pt.ulsbe.pontesaude.ui.screens.inicio
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
 import pt.ulsbe.pontesaude.data.repository.MedicacaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
@@ -22,6 +26,7 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
  * @property modoCuidadorAtivo Indica se o utente está no papel de cuidador a gerir um familiar.
  * @property pessoasCuidadas Lista de familiares/dependentes associados à conta do cuidador.
  * @property nomePessoaCuidada Nome resumido do familiar atualmente em visualização.
+ * @property ultimaAtualizacaoFormatada Texto amigável da última sincronização com a cloud.
  * @property emCarregamento Indica se está a decorrer uma operação assíncrona de atualização.
  * @property mensagemErro Mensagem de erro descritiva em caso de falha de carregamento ou rede.
  */
@@ -32,6 +37,7 @@ data class InicioUiState(
     val modoCuidadorAtivo: Boolean = false,
     val pessoasCuidadas: List<Perfil> = emptyList(),
     val nomePessoaCuidada: String = "",
+    val ultimaAtualizacaoFormatada: String = "Hoje às 10:00",
     val emCarregamento: Boolean = false,
     val mensagemErro: String? = null,
 )
@@ -46,6 +52,7 @@ class InicioViewModel(
     private val perfilRepository: PerfilRepository,
     private val consultaRepository: ConsultaRepository,
     private val medicacaoRepository: MedicacaoRepository,
+    private val configuracaoRepository: ConfiguracaoRepository? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InicioUiState())
@@ -64,6 +71,7 @@ class InicioViewModel(
         val medicamentos = medicacaoRepository.medicamentos(perfil)
         val modoCuidador = perfilRepository.modoCuidador
         val cuidados = perfilRepository.pessoasCuidadas
+        val textoAtualizacao = configuracaoRepository?.formatarUltimaAtualizacao() ?: "Hoje às 10:00"
 
         _uiState.update {
             it.copy(
@@ -73,7 +81,22 @@ class InicioViewModel(
                 modoCuidadorAtivo = modoCuidador,
                 pessoasCuidadas = cuidados,
                 nomePessoaCuidada = if (modoCuidador) perfil.nomeCurto else "",
+                ultimaAtualizacaoFormatada = textoAtualizacao,
             )
+        }
+    }
+
+    /**
+     * Dispara o pull-to-refresh e sincroniza dados clínicos com a cloud.
+     */
+    fun dispararAtualizacao(aoSincronizar: (suspend () -> Unit)? = null) {
+        _uiState.update { it.copy(emCarregamento = true) }
+        viewModelScope.launch {
+            delay(600) // Transição suave de carregamento
+            aoSincronizar?.invoke()
+            configuracaoRepository?.registarAtualizacao()
+            atualizarEstado()
+            _uiState.update { it.copy(emCarregamento = false) }
         }
     }
 
