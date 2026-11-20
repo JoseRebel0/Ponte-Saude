@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
 import pt.ulsbe.pontesaude.data.local.deserializarVouchers
+import pt.ulsbe.pontesaude.data.local.paraEntidade
 import pt.ulsbe.pontesaude.data.local.paraModelo
 import pt.ulsbe.pontesaude.data.local.serializarVouchers
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
@@ -43,6 +44,9 @@ class SaudeRepository(
     var pontosSeguranca by mutableIntStateOf(preferencias.getInt("pontos_seguranca", 50))
         private set
 
+    var pontosTotais by mutableIntStateOf(preferencias.getInt("pontos_totais", 50))
+        private set
+
     val modulosConcluidos = mutableStateListOf<String>()
     val modulosOuvidos = mutableStateListOf<String>()
     val videosAssistidos = mutableStateListOf<String>()
@@ -57,7 +61,10 @@ class SaudeRepository(
         modulosOuvidos.addAll(preferencias.getStringSet("listened_modules", emptySet()).orEmpty())
         videosAssistidos.addAll(preferencias.getStringSet("watched_videos", emptySet()).orEmpty())
         vouchersResgatados.addAll(lerVouchers())
+        val pontosUsadosVouchers = vouchersResgatados.sumOf { it.pontosUsados }
+        pontosTotais = maxOf(preferencias.getInt("pontos_totais", 0), pontosSeguranca + pontosUsadosVouchers)
         carregarCatalogoLocal()
+        sincronizarCatalogoFirestore()
     }
 
     fun guardarDadosPerfilEmMemoria(
@@ -68,8 +75,13 @@ class SaudeRepository(
         videos: List<String>,
         vouchers: List<VoucherResgatado>,
     ) {
+        val pontosUsadosVouchers = vouchers.sumOf { it.pontosUsados }
+        val guardadosTotais = preferencias.getInt(chavePerfil("pontos_totais", idPerfil), 0)
+        val total = maxOf(guardadosTotais, pontos + pontosUsadosVouchers)
+
         preferencias.edit()
             .putInt(chavePerfil("pontos_seguranca", idPerfil), pontos)
+            .putInt(chavePerfil("pontos_totais", idPerfil), total)
             .putStringSet(chavePerfil("completed_modules", idPerfil), concluidos.toSet())
             .putStringSet(chavePerfil("listened_modules", idPerfil), ouvidos.toSet())
             .putStringSet(chavePerfil("watched_videos", idPerfil), videos.toSet())
@@ -86,7 +98,11 @@ class SaudeRepository(
         videosAssistidos.clear()
         videosAssistidos.addAll(preferencias.getStringSet(chavePerfil("watched_videos", idPerfil), emptySet()).orEmpty())
         vouchersResgatados.clear()
-        vouchersResgatados.addAll(lerVouchers(idPerfil))
+        val vouchers = lerVouchers(idPerfil)
+        vouchersResgatados.addAll(vouchers)
+        val pontosUsadosVouchers = vouchers.sumOf { it.pontosUsados }
+        val guardadosTotais = preferencias.getInt(chavePerfil("pontos_totais", idPerfil), 0)
+        pontosTotais = maxOf(guardadosTotais, pontosSeguranca + pontosUsadosVouchers)
     }
 
     private fun chavePerfil(chaveBase: String, idPerfil: String = ""): String =
@@ -97,17 +113,42 @@ class SaudeRepository(
         val vids = dbLocal.videoDao().obterTodos().map { it.paraModelo() }
         val recomps = dbLocal.recompensaDao().obterTodas().map { it.paraModelo() }
 
-        if (mods.isNotEmpty()) {
-            modulosSaude.clear()
-            modulosSaude.addAll(mods)
-        }
-        if (vids.isNotEmpty()) {
-            videosBiblioteca.clear()
-            videosBiblioteca.addAll(vids)
-        }
-        if (recomps.isNotEmpty()) {
-            catalogoRecompensas.clear()
-            catalogoRecompensas.addAll(recomps)
+        modulosSaude.clear()
+        modulosSaude.addAll(mods)
+
+        videosBiblioteca.clear()
+        videosBiblioteca.addAll(vids)
+
+        catalogoRecompensas.clear()
+        catalogoRecompensas.addAll(recomps)
+    }
+
+    fun sincronizarCatalogoFirestore(aoTerminar: (() -> Unit)? = null) {
+        if (estaOnline()) {
+            scope.launch {
+                runCatching {
+                    val modsRemotos = clienteFirestore.obterModulosSaude()
+                    val vidsRemotos = clienteFirestore.obterVideosBiblioteca()
+                    val recompsRemotas = clienteFirestore.obterCatalogoRecompensas()
+
+                    if (modsRemotos.isNotEmpty()) {
+                        dbLocal.moduloDao().inserirVarios(modsRemotos.map { it.paraEntidade() })
+                        modulosSaude.clear()
+                        modulosSaude.addAll(modsRemotos)
+                    }
+                    if (vidsRemotos.isNotEmpty()) {
+                        dbLocal.videoDao().inserirVarios(vidsRemotos.map { it.paraEntidade() })
+                        videosBiblioteca.clear()
+                        videosBiblioteca.addAll(vidsRemotos)
+                    }
+                    if (recompsRemotas.isNotEmpty()) {
+                        dbLocal.recompensaDao().inserirVarias(recompsRemotas.map { it.paraEntidade() })
+                        catalogoRecompensas.clear()
+                        catalogoRecompensas.addAll(recompsRemotas)
+                    }
+                }
+                aoTerminar?.invoke()
+            }
         }
     }
 
@@ -121,11 +162,11 @@ class SaudeRepository(
         val estavaConcluido = id in modulosConcluidos
         alternarModulo(id, idPerfil)
         return if (!estavaConcluido) {
-            adicionarPontos(20, idPerfil)
-            20
+            adicionarPontos(50, idPerfil)
+            50
         } else {
-            adicionarPontos(-20, idPerfil)
-            -20
+            adicionarPontos(-50, idPerfil)
+            -50
         }
     }
 
@@ -133,20 +174,6 @@ class SaudeRepository(
         if (idModulo !in modulosOuvidos) {
             modulosOuvidos.add(idModulo)
             preferencias.edit().putStringSet(chavePerfil("listened_modules", idPerfil), modulosOuvidos.toSet()).apply()
-            adicionarPontos(15, idPerfil)
-            sincronizarRecompensasFirestore(idPerfil)
-            return 15
-        }
-        return 0
-    }
-
-    fun marcarModuloOuvido(id: String, idPerfil: String = ""): Int =
-        premiarOuvirModulo(id, idPerfil)
-
-    fun premiarVerVideo(idVideo: String, idPerfil: String = ""): Int {
-        if (idVideo !in videosAssistidos) {
-            videosAssistidos.add(idVideo)
-            preferencias.edit().putStringSet(chavePerfil("watched_videos", idPerfil), videosAssistidos.toSet()).apply()
             adicionarPontos(25, idPerfil)
             sincronizarRecompensasFirestore(idPerfil)
             return 25
@@ -154,11 +181,23 @@ class SaudeRepository(
         return 0
     }
 
-    fun marcarVideoAssistido(id: String, idPerfil: String = ""): Int =
-        premiarVerVideo(id, idPerfil)
+    fun premiarVerVideo(idVideo: String, idPerfil: String = ""): Int {
+        if (idVideo !in videosAssistidos) {
+            videosAssistidos.add(idVideo)
+            preferencias.edit().putStringSet(chavePerfil("watched_videos", idPerfil), videosAssistidos.toSet()).apply()
+            adicionarPontos(30, idPerfil)
+            sincronizarRecompensasFirestore(idPerfil)
+            return 30
+        }
+        return 0
+    }
 
     fun adicionarPontos(quantidade: Int, idPerfil: String = "") {
         pontosSeguranca = (pontosSeguranca + quantidade).coerceAtLeast(0)
+        if (quantidade > 0) {
+            pontosTotais += quantidade
+            preferencias.edit().putInt(chavePerfil("pontos_totais", idPerfil), pontosTotais).apply()
+        }
         preferencias.edit().putInt(chavePerfil("pontos_seguranca", idPerfil), pontosSeguranca).apply()
     }
 

@@ -1,16 +1,17 @@
 package pt.ulsbe.pontesaude.data.local.entity;
 
+import androidx.annotation.NonNull;
 import androidx.room.Entity;
 import androidx.room.Ignore;
-import androidx.room.PrimaryKey;
 
 /**
  * Entidade Room que representa a tabela de medicamentos e plano posológico.
+ * Chave primária composta por id e idPerfil para isolamento rigoroso entre perfis.
  */
-@Entity(tableName = "medicamentos")
+@Entity(tableName = "medicamentos", primaryKeys = {"id", "idPerfil"})
 public class MedicamentoEntity {
-    @PrimaryKey
     public long id;
+    @NonNull
     public String idPerfil;
     public String nome;
     public String finalidade;
@@ -22,7 +23,7 @@ public class MedicamentoEntity {
     public String laboratorio;
     public boolean pendenteSincronizacao;
 
-    public MedicamentoEntity(long id, String idPerfil, String nome, String finalidade,
+    public MedicamentoEntity(long id, @NonNull String idPerfil, String nome, String finalidade,
                              String principioAtivo, String hora, long cor, boolean ativo,
                              String fotografia, String laboratorio, boolean pendenteSincronizacao) {
         this.id = id;
@@ -39,7 +40,7 @@ public class MedicamentoEntity {
     }
 
     @Ignore
-    public MedicamentoEntity(long id, String idPerfil, String nome, String finalidade,
+    public MedicamentoEntity(long id, @NonNull String idPerfil, String nome, String finalidade,
                              String principioAtivo, String hora, long cor, boolean ativo,
                              String fotografia, boolean pendenteSincronizacao) {
         this(id, idPerfil, nome, finalidade, principioAtivo, hora, cor, ativo, fotografia, "", pendenteSincronizacao);

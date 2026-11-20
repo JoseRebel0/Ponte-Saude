@@ -27,7 +27,7 @@ class ConfiguracaoRepository(context: Context) {
     var altoContraste by mutableStateOf(preferencias.getBoolean("alto_contraste", false))
         private set
 
-    var somVozAtivo by mutableStateOf(preferencias.getBoolean("som_voz_ativo", true))
+    var somVozAtivo by mutableStateOf(preferencias.getBoolean("som_voz_ativo", false))
         private set
 
     var notificacoesAtivas by mutableStateOf(preferencias.getBoolean("notificacoes_ativas", true))
@@ -49,16 +49,6 @@ class ConfiguracaoRepository(context: Context) {
     fun atualizarReduzirMovimento(valor: Boolean) {
         reduzirMovimento = valor
         preferencias.edit().putBoolean("reduce_motion", valor).apply()
-    }
-
-    fun atualizarAltoContraste(valor: Boolean) {
-        altoContraste = valor
-        preferencias.edit().putBoolean("alto_contraste", valor).apply()
-    }
-
-    fun atualizarSomVoz(valor: Boolean) {
-        somVozAtivo = valor
-        preferencias.edit().putBoolean("som_voz_ativo", valor).apply()
     }
 
     fun atualizarNotificacoesAtivas(valor: Boolean) {

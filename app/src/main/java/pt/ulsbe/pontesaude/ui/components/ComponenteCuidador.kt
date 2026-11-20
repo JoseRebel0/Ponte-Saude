@@ -332,7 +332,6 @@ fun DialogoAdicionarPessoaCuidada(
                                             onClick = {
                                                 repositorio.associarPerfilCuidado(p.id)
                                                 perfilCriado = p
-                                                plataforma?.falar("Utente ${p.nome} associado com sucesso ao seu Modo Cuidador.")
                                                 passo = 3
                                             },
                                             shape = RoundedCornerShape(10.dp),
@@ -518,7 +517,6 @@ fun DialogoAdicionarPessoaCuidada(
                                             numeroUtente = numeroUtente,
                                         )
                                         perfilCriado = novo
-                                        plataforma?.falar("Utente $nome associado com sucesso ao seu Modo Cuidador.")
                                         passo = 3
                                     },
                                     modifier = Modifier
@@ -816,7 +814,7 @@ fun SecaoModoCuidador(
         // ==========================================
         // 2. CUIDADORES QUE CUIDAM DE MIM (cuidadoresIds)
         // ==========================================
-        val cuidadoresDeMim = repositorio.todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds }
+        val cuidadoresDeMim = repositorio.todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds && it.id != perfilSessao.id }
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),

@@ -1,12 +1,10 @@
 package pt.ulsbe.pontesaude.ui.screens.saude
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.data.repository.SaudeRepository
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -37,6 +35,7 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
 data class SaudeUiState(
     val perfil: Perfil? = null,
     val pontosSeguranca: Int = 50,
+    val pontosTotais: Int = 50,
     val modulosConcluidos: List<String> = emptyList(),
     val modulosOuvidos: List<String> = emptyList(),
     val videosAssistidos: List<String> = emptyList(),
@@ -75,10 +74,14 @@ class SaudeViewModel(
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
         saudeRepository.carregarDadosPerfil(perfil.id)
+        if (saudeRepository.modulosSaude.isEmpty()) {
+            saudeRepository.carregarCatalogoLocal()
+        }
         _uiState.update {
             it.copy(
                 perfil = perfil,
                 pontosSeguranca = saudeRepository.pontosSeguranca,
+                pontosTotais = saudeRepository.pontosTotais,
                 modulosConcluidos = saudeRepository.modulosConcluidos.toList(),
                 modulosOuvidos = saudeRepository.modulosOuvidos.toList(),
                 videosAssistidos = saudeRepository.videosAssistidos.toList(),
@@ -88,28 +91,31 @@ class SaudeViewModel(
                 vouchers = saudeRepository.vouchersResgatados.toList(),
             )
         }
+        saudeRepository.sincronizarCatalogoFirestore {
+            _uiState.update {
+                it.copy(
+                    modulos = saudeRepository.modulosSaude.toList(),
+                    videos = saudeRepository.videosBiblioteca.toList(),
+                    recompensas = saudeRepository.catalogoRecompensas.toList(),
+                )
+            }
+        }
     }
 
     /**
-     * Abre ou fecha o detalhe de um módulo de literacia interativo.
+     * Alterna a conclusão de um módulo educativo, creditando ou debitando os pontos correspondentes (50 pts).
      */
-    fun abrirModulo(id: String?) {
-        _uiState.update { it.copy(moduloAbertoId = id) }
-    }
-
-    /**
-     * Alterna a conclusão de um módulo educativo, creditando ou debitando os pontos correspondentes.
-     */
-    fun alternarConclusaoModulo(id: String) {
+    fun alternarConclusaoModulo(id: String): Int {
         val perfil = perfilRepository.perfilAtivo
-        saudeRepository.alternarModuloComPontos(id, perfil.id)
+        val pts = saudeRepository.alternarModuloComPontos(id, perfil.id)
         recarregar()
+        return pts
     }
 
     /**
-     * Recompensa a audição do módulo via voz TTS com 15 pontos de segurança adicionais.
+     * Recompensa a audição do módulo via voz TTS com 25 pontos de segurança adicionais.
      */
-    fun ouvirModulo(id: String, texto: String, plataforma: ServicosDispositivo) {
+    fun ouvirModulo(id: String, texto: String, plataforma: ServicosDispositivo): Int {
         plataforma.falar(texto)
         val perfil = perfilRepository.perfilAtivo
         val pontosGanhos = saudeRepository.premiarOuvirModulo(id, perfil.id)
@@ -117,18 +123,20 @@ class SaudeViewModel(
             _uiState.update { it.copy(mensagemSucesso = "Ganhou +$pontosGanhos pontos de segurança!") }
         }
         recarregar()
+        return pontosGanhos
     }
 
     /**
-     * Recompensa a visualização de um vídeo clínico com 25 pontos de segurança.
+     * Recompensa a visualização de um vídeo clínico com 30 pontos de segurança.
      */
-    fun verVideo(idVideo: String) {
+    fun verVideo(idVideo: String): Int {
         val perfil = perfilRepository.perfilAtivo
         val pontosGanhos = saudeRepository.premiarVerVideo(idVideo, perfil.id)
         if (pontosGanhos > 0) {
             _uiState.update { it.copy(mensagemSucesso = "Parabéns! Ganhou +$pontosGanhos pontos por ver o vídeo.") }
         }
         recarregar()
+        return pontosGanhos
     }
 
     /**
@@ -147,27 +155,6 @@ class SaudeViewModel(
         } else {
             _uiState.update {
                 it.copy(mensagemErro = "Pontos insuficientes para resgatar este voucher.")
-            }
-        }
-    }
-
-    /**
-     * Simplifica a definição de termos clínicos complexos com auxílio do Gemini AI.
-     */
-    fun explicarTermoComIa(termo: String) {
-        if (termo.isBlank()) return
-        _uiState.update { it.copy(aTraduzirTermoIa = true, explicacaoIa = null, mensagemErro = null) }
-        viewModelScope.launch {
-            val resultado = saudeRepository.explicarTermoMedicoComIa(termo)
-            resultado.onSuccess { explicacao ->
-                _uiState.update { it.copy(aTraduzirTermoIa = false, explicacaoIa = explicacao) }
-            }.onFailure { erro ->
-                _uiState.update {
-                    it.copy(
-                        aTraduzirTermoIa = false,
-                        mensagemErro = "Não foi possível traduzir o termo: ${erro.localizedMessage}",
-                    )
-                }
             }
         }
     }

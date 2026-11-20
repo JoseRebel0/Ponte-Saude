@@ -52,12 +52,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
-import pt.ulsbe.pontesaude.data.repository.formatarMomentoAtualizacao
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
@@ -94,10 +92,6 @@ fun EcraInicio(
     } else {
         perfil.consultas.firstOrNull()
     }
-    LaunchedEffect(perfil.id) {
-        viewModel?.atualizarEstado()
-    }
-
     var aAtualizarLocal by remember { mutableStateOf(false) }
     val aAtualizar = uiState?.emCarregamento ?: aAtualizarLocal
     val textoAtualizacao = uiState?.ultimaAtualizacaoFormatada
@@ -106,27 +100,10 @@ fun EcraInicio(
 
     val escopo = rememberCoroutineScope()
 
-    fun dispararAtualizacao() {
-        if (viewModel != null) {
-            viewModel.dispararAtualizacao(aoSincronizar)
-        } else {
-            if (aAtualizarLocal) return
-            aAtualizarLocal = true
-            escopo.launch {
-                delay(600)
-                aoSincronizar?.invoke()
-                aAtualizarLocal = false
-            }
-        }
+    LaunchedEffect(perfil.id) {
+        viewModel?.atualizarEstado()
     }
 
-    LaunchedEffect(Unit) {
-        if (viewModel != null) {
-            viewModel.atualizarEstado()
-        } else {
-            dispararAtualizacao()
-        }
-    }
 
     val atalhos = listOf(
         Atalho("Linha SNS 24", Icons.Rounded.HeadsetMic) {
@@ -141,9 +118,22 @@ fun EcraInicio(
 
     val estadoLista = rememberLazyListState()
 
+    val dispararAtualizacao: () -> Unit = {
+        if (viewModel != null) {
+            viewModel.dispararAtualizacao(aoSincronizar)
+        } else {
+            aAtualizarLocal = true
+            escopo.launch {
+                delay(600)
+                aoSincronizar?.invoke()
+                aAtualizarLocal = false
+            }
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = aAtualizar,
-        onRefresh = { dispararAtualizacao() },
+        onRefresh = dispararAtualizacao,
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(

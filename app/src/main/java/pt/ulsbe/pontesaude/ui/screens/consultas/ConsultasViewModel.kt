@@ -62,6 +62,7 @@ class ConsultasViewModel(
      */
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
+        val perfilMudou = _uiState.value.perfil?.id != perfil.id
         val consultas = consultaRepository.consultas(perfil)
         val modoCuidador = perfilRepository.modoCuidador
         val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
@@ -69,7 +70,11 @@ class ConsultasViewModel(
             it.copy(
                 perfil = perfil,
                 consultas = consultas,
-                consultaSelecionada = it.consultaSelecionada ?: consultas.firstOrNull(),
+                consultaSelecionada = if (perfilMudou) {
+                    consultas.firstOrNull()
+                } else {
+                    it.consultaSelecionada?.takeIf { c -> consultas.any { it.id == c.id } } ?: consultas.firstOrNull()
+                },
                 agendaEAlarmesAtivos = agendaAtiva,
                 modoCuidador = modoCuidador,
             )
@@ -89,12 +94,6 @@ class ConsultasViewModel(
         }
     }
 
-    /**
-     * Define a consulta selecionada para visualização detalhada ou edição de checklist.
-     */
-    fun selecionarConsulta(consulta: Consulta) {
-        _uiState.update { it.copy(consultaSelecionada = consulta) }
-    }
 
     /**
      * Agenda uma nova consulta médica ou exame para o perfil ativo.
@@ -106,14 +105,6 @@ class ConsultasViewModel(
         recarregar()
     }
 
-    /**
-     * Cancela e remove uma consulta existente pelo seu identificador único.
-     */
-    fun cancelarConsulta(id: Int) {
-        val perfil = perfilRepository.perfilAtivo
-        consultaRepository.cancelarConsulta(perfil, id)
-        recarregar()
-    }
 
     /**
      * Sincroniza todas as consultas agendadas com a aplicação de Calendário/Agenda nativa do telemóvel.

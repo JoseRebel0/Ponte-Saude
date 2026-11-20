@@ -66,8 +66,6 @@ class ClienteFirestore(
         obterChecklistConsulta,
     )
 
-    suspend fun carregarPerfisFirestore(): Result<List<DadosPerfilRemoto>> = perfis.carregarPerfisFirestore()
-
     suspend fun carregarTodosOsPerfis(): Result<List<DadosPerfilRemoto>> = perfis.carregarTodosOsPerfis()
 
     suspend fun associarPerfilCuidado(idCuidador: String, idCuidado: String) =
@@ -75,8 +73,6 @@ class ClienteFirestore(
 
     suspend fun desassociarPerfilCuidado(idCuidador: String, idCuidado: String) =
         perfis.desassociarPerfilCuidado(idCuidador, idCuidado)
-
-    suspend fun limparTodasAssociacoesFirestore() = perfis.limparTodasAssociacoesFirestore()
 
     suspend fun apagarPerfil(idPerfil: String) = perfis.apagarPerfil(idPerfil)
 
@@ -88,21 +84,10 @@ class ClienteFirestore(
 
     fun iniciarEscutaPerfisEmTempoReal(aoAlterar: () -> Unit) = perfis.iniciarEscutaPerfisEmTempoReal(aoAlterar)
 
-    fun pararEscutaPerfis() = perfis.pararEscutaPerfis()
-
     // --- Módulo: Medicação ---
 
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) =
         medicacao.guardarMedicamento(idPerfil, med)
-
-    suspend fun atualizarMedicamento(idPerfil: String, med: Medicamento) =
-        medicacao.guardarMedicamento(idPerfil, med)
-
-    suspend fun atualizarImagemMedicamento(idPerfil: String, idMedicamento: Long, imagemBase64: String) =
-        medicacao.atualizarImagemMedicamento(idPerfil, idMedicamento, imagemBase64)
-
-    suspend fun removerMedicamento(idPerfil: String, idMedicamento: Long) =
-        medicacao.removerMedicamento(idPerfil, idMedicamento)
 
     suspend fun apagarMedicamento(idPerfil: String, idMedicamento: Long) =
         medicacao.apagarMedicamento(idPerfil, idMedicamento)
@@ -114,9 +99,6 @@ class ClienteFirestore(
 
     suspend fun atualizarConsultas(idPerfil: String, consultas: List<Consulta>) =
         this.consultas.atualizarConsultas(idPerfil, consultas)
-
-    suspend fun removerConsulta(idPerfil: String, idConsulta: Int) =
-        consultas.removerConsulta(idPerfil, idConsulta)
 
     suspend fun atualizarChecklistConsulta(
         idPerfil: String,
@@ -139,8 +121,3 @@ class ClienteFirestore(
         this.notas.atualizarProdutos(idPerfil, produtos)
 }
 
-/**
- * Typealias de compatibilidade para garantir que qualquer referência legada
- * a ServicoFirestore continue a funcionar perfeitamente.
- */
-typealias ServicoFirestore = ClienteFirestore

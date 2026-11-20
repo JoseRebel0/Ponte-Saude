@@ -61,17 +61,12 @@ data class Perfil(
      * Idade calculada dinamicamente a partir do ano de nascimento.
      */
     val idadeFormatada: String
-        get() = calcularIdade(dataNascimento)
-}
-
-/**
- * Calcula a idade em anos completos com base na data de nascimento (formato dd/MM/yyyy).
- */
-fun calcularIdade(dataNascimento: String): String {
-    val partes = dataNascimento.split("/")
-    val ano = partes.lastOrNull()?.toIntOrNull() ?: return ""
-    val idade = 2026 - ano
-    return if (idade > 0) "$idade anos" else ""
+        get() {
+            val ano = dataNascimento.split("/").lastOrNull()?.toIntOrNull() ?: return ""
+            val anoAtual = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+            val idade = anoAtual - ano
+            return if (idade > 0) "$idade anos" else ""
+        }
 }
 
 // ============================================================================

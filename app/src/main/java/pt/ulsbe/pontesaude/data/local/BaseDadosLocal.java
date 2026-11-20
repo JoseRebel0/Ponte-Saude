@@ -37,7 +37,7 @@ import pt.ulsbe.pontesaude.data.local.entity.VideoEntity;
         VideoEntity.class,
         RecompensaEntity.class
     },
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 public abstract class BaseDadosLocal extends RoomDatabase {

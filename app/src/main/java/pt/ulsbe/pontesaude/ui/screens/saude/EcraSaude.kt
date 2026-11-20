@@ -1,10 +1,5 @@
 package pt.ulsbe.pontesaude.ui.screens.saude
 
-import android.app.Activity
-import android.content.Intent
-import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,7 +33,6 @@ import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Medication
-import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Phone
@@ -76,14 +70,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.data.repository.SaudeRepository
@@ -109,34 +101,6 @@ import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
-fun normalizarTexto(entrada: String): String {
-    val normalizado = java.text.Normalizer.normalize(entrada, java.text.Normalizer.Form.NFD)
-    return normalizado.replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "").lowercase().trim()
-}
-
-private val entradasGlossario = listOf(
-    listOf("hipertensao", "hipertensão", "pressao alta", "tensao alta") to
-        "A pressão do sangue nas artérias está mais alta do que devia. Tomar a medicação todos os dias ajuda a proteger o coração.",
-    listOf("jejum") to
-        "Não comer nem beber nada (só água) durante o número de horas indicado antes do exame.",
-    listOf("anticoagulante", "varfarina") to
-        "Medicamento que torna o sangue menos espesso, para evitar coágulos. Atenção a chás como o de erva-de-são-joão.",
-    listOf("alta hospitalar", "alta") to
-        "O médico considera que já pode ir para casa. Siga as indicações escritas e marque a consulta de seguimento.",
-    listOf("diabetes", "glicemia", "acucar", "açúcar") to
-        "Açúcar mais alto no sangue do que devia. Alimentação, exercício e medicação ajudam a manter controlado.",
-)
-
-fun pesquisarGlossario(consulta: String): String {
-    val limpa = normalizarTexto(consulta)
-    if (limpa.isBlank()) return "Escreva ou diga um termo para explicar."
-    for ((chaves, explicacao) in entradasGlossario) {
-        if (chaves.any { limpa.contains(normalizarTexto(it)) }) {
-            return explicacao
-        }
-    }
-    return "Em linguagem simples: peça ao seu médico para explicar este termo com calma, ou grave a dúvida nos Apontamentos para a próxima consulta."
-}
 
 /**
  * Ecrã de Saúde e Literacia com tradutor médico em linguagem simples, módulos educativos e Pull-to-Refresh suave.
@@ -163,11 +127,13 @@ fun EcraSaude(
     val modulosFonte = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
     val modulo = modulosFonte.find { it.id == idModuloAberto }
     if (modulo != null) {
+        val listaConcluidosEfetiva = uiState?.modulosConcluidos ?: concluidos
         EcraModulo(
             modulo = modulo,
             perfil = perfil,
-            concluidos = concluidos,
+            concluidos = listaConcluidosEfetiva,
             saudeRepository = saudeRepository,
+            viewModel = viewModel,
             plataforma = plataforma,
             aoVoltar = { aoAbrirModulo(null) },
             aoAlternar = aoAlternarModulo,
@@ -183,11 +149,13 @@ fun EcraSaude(
     var voucherRecemResgatado by remember { mutableStateOf<VoucherResgatado?>(null) }
     var mensagemNotificacao by remember { mutableStateOf<String?>(null) }
 
+    val tituloEcra = if (perfilRepository?.modoCuidador == true) "Saúde · ${perfil.nome}" else "Saúde"
+    val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
+    val estadoLista = rememberLazyListState()
+
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Saúde · ${perfil.nome}" else "Saúde"
-        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
-        val estadoLista = rememberLazyListState()
+
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
@@ -198,63 +166,67 @@ fun EcraSaude(
                     aAtualizar = false
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
             LazyColumn(
                 state = estadoLista,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
+
             if (perfilRepository?.modoCuidador == true) {
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
-                        border = BorderStroke(1.5.dp, Color(0xFF10B981)),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                    Box(Modifier.padding(horizontal = 20.dp)) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                            border = BorderStroke(1.5.dp, Color(0xFF10B981)),
                         ) {
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .background(Color(0xFF10B981), CircleShape),
-                                contentAlignment = Alignment.Center,
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(perfil.iniciais, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(perfil.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.width(6.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFFDCFCE7))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    ) {
-                                        Text("Modo Cuidador", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
-                                    }
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .background(Color(0xFF10B981), CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(perfil.iniciais, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 }
-                                Text(
-                                    "Nº SNS: ${perfil.numeroUtente} · ${perfil.idadeFormatada}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Atenuado,
-                                )
-                                if (perfil.alergias.isNotBlank() && !perfil.alergias.contains("Sem", ignoreCase = true)) {
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(perfil.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                        Spacer(Modifier.width(6.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(0xFFDCFCE7))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        ) {
+                                            Text("Modo Cuidador", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
+                                        }
+                                    }
                                     Text(
-                                        "⚠️ Alergias: ${perfil.alergias}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFDC2626),
-                                        fontWeight = FontWeight.Bold,
+                                        "Nº SNS: ${perfil.numeroUtente} · ${perfil.idadeFormatada}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Atenuado,
                                     )
+                                    if (perfil.alergias.isNotBlank() && !perfil.alergias.contains("Sem", ignoreCase = true)) {
+                                        Text(
+                                            "⚠️ Alergias: ${perfil.alergias}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFFDC2626),
+                                            fontWeight = FontWeight.Bold,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -264,18 +236,20 @@ fun EcraSaude(
 
             // PROGRAMA DE LITERACIA & SEGURANÇA (HUD POLIDO E EQUILIBRADO)
             item {
-                val pontos = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
-                val infoNivel = calcularNivelSeguranca(pontos)
+                val pontosSaldo = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
                 val vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty()
+                val pontosTotais = uiState?.pontosTotais ?: saudeRepository?.pontosTotais ?: (pontosSaldo + vouchers.sumOf { it.pontosUsados })
+                val infoNivel = calcularNivelSeguranca(pontosTotais)
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                ) {
-                    Column(
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    ) {
+                        Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(18.dp),
@@ -361,7 +335,7 @@ fun EcraSaude(
                                     )
                                     Row(verticalAlignment = Alignment.Bottom) {
                                         Text(
-                                            text = "$pontos",
+                                            text = "$pontosSaldo",
                                             fontSize = 28.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = MarcaMedio,
@@ -404,7 +378,7 @@ fun EcraSaude(
                                         color = Atenuado,
                                     )
                                     Text(
-                                        text = "$pontos / ${infoNivel.pontosProximoNivel} pts",
+                                        text = if (infoNivel.nivel >= 4) "$pontosTotais pts (Nível Máximo)" else "$pontosTotais / ${infoNivel.pontosProximoNivel} pts",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Atenuado,
@@ -463,19 +437,23 @@ fun EcraSaude(
                     }
                 }
             }
+        }
 
             // LISTA DE MÓDULOS DE SEGURANÇA COM CARTÕES BEM ESTRUTURADOS
             item {
-                Column {
-                    Text("Módulos de Segurança do Doente", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(2.dp))
-                    Text("Toque para abrir, ouvir e acumular pontos de segurança", color = Atenuado, style = MaterialTheme.typography.bodySmall)
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Column {
+                        Text("Módulos de Segurança do Doente", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(2.dp))
+                        Text("Toque para abrir, ouvir e acumular pontos de segurança", color = Atenuado, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             val listaModulos = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
             items(listaModulos, key = { it.id }) { item ->
                 val concluido = item.id in concluidos
-                Card(
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
@@ -551,25 +529,33 @@ fun EcraSaude(
                     }
                 }
             }
+        }
 
             // LISTA DE VÍDEOS OFICIAIS DO SNS COM DESIGN ESPAÇOSO
             item {
-                Column {
-                    Text("Biblioteca de Saúde & Vídeos Oficiais", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(2.dp))
-                    Text("Vídeos educativos do SNS no YouTube · Assista e ganhe +30 pontos de literacia", color = Atenuado, style = MaterialTheme.typography.bodySmall)
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Column {
+                        Text("Biblioteca de Saúde & Vídeos Oficiais", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(2.dp))
+                        Text("Vídeos educativos do SNS no YouTube · Assista e ganhe +30 pontos de literacia", color = Atenuado, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
             val listaVideos = uiState?.videos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.videosBiblioteca ?: emptyList()
             items(listaVideos, key = { it.id }) { video ->
                 val jaVisto = (uiState?.videosAssistidos?.contains(video.id) == true) || (saudeRepository?.videosAssistidos?.contains(video.id) == true)
-                Card(
+                Box(Modifier.padding(horizontal = 20.dp)) {
+                    Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .clickable {
                             plataforma.abrirLigacao(video.urlYoutube)
-                            if (viewModel != null) viewModel.verVideo(video.id) else saudeRepository?.premiarVerVideo(video.id); val pts = 25
+                            val pts = if (viewModel != null) {
+                                viewModel.verVideo(video.id)
+                            } else {
+                                saudeRepository?.premiarVerVideo(video.id, perfil.id) ?: 0
+                            }
                             if (pts > 0) {
                                 mensagemNotificacao = "⭐ Parabéns! Ganhou +$pts Pontos por assistir ao vídeo oficial «${video.titulo}»!"
                             }
@@ -664,10 +650,11 @@ fun EcraSaude(
                     }
                 }
             }
+        }
 
             // BOTÕES DE CONTACTO DE EMERGÊNCIA
-            item { BotaoContacto("Ligar SNS 24 · 808 24 24 24", MarcaMedio) { plataforma.marcarNumero("808242424") } }
-            item { BotaoContacto("Emergência 112", Color(0xFFDC2626)) { plataforma.marcarNumero("112") } }
+            item { Box(Modifier.padding(horizontal = 20.dp)) { BotaoContacto("Ligar SNS 24 · 808 24 24 24", MarcaMedio) { plataforma.marcarNumero("808242424") } } }
+            item { Box(Modifier.padding(horizontal = 20.dp)) { BotaoContacto("Emergência 112", Color(0xFFDC2626)) { plataforma.marcarNumero("112") } } }
         }
     }
 }
@@ -727,6 +714,7 @@ fun EcraModulo(
     perfil: Perfil,
     concluidos: List<String>,
     saudeRepository: SaudeRepository? = null,
+    viewModel: SaudeViewModel? = null,
     plataforma: ServicosDispositivo,
     aoVoltar: () -> Unit,
     aoAlternar: (String) -> Unit,
@@ -735,17 +723,22 @@ fun EcraModulo(
 ) {
     var mensagemPontos by remember { mutableStateOf<String?>(null) }
     val estadoModulo = rememberLazyListState()
-    Column {
+
+    Column(Modifier.fillMaxSize()) {
         CabecalhoEcra(modulo.titulo, "Módulo", perfil.iniciais, aoVoltar)
+
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
+                .fillMaxWidth()
+                .weight(1f),
             state = estadoModulo,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            if (modulo.tipo != TipoModulo.CRIANCAS) {
-                item {
+
+        if (modulo.tipo != TipoModulo.CRIANCAS) {
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     CartaoApp {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             modulo.conteudos.forEach {
@@ -759,21 +752,29 @@ fun EcraModulo(
                     }
                 }
             }
-            item {
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
                 BotaoOuvir("Ouvir este módulo (+25 pts)", {
-                    plataforma.falar(modulo.fala)
-                    val pts = saudeRepository?.premiarOuvirModulo(modulo.id) ?: 0
+                    val pts = if (viewModel != null) {
+                        viewModel.ouvirModulo(modulo.id, modulo.fala, plataforma)
+                    } else {
+                        plataforma.falar(modulo.fala)
+                        saudeRepository?.premiarOuvirModulo(modulo.id, perfil.id) ?: 0
+                    }
                     if (pts > 0) {
                         mensagemPontos = "🎉 Parabéns! Ganhou +$pts Pontos de Segurança por ouvir este módulo!"
                     }
                 }, Modifier.fillMaxWidth())
             }
-            when (modulo.tipo) {
-                TipoModulo.LAVAGEM_MAOS -> item { LavagemMaos(plataforma) }
-                TipoModulo.CIRURGIA -> item { ModuloCirurgia() }
-                TipoModulo.QUESTIONARIO -> item { ModuloQuestionario(plataforma) }
-                TipoModulo.LEITURA -> item { ModuloLeitura(plataforma) }
-                TipoModulo.QUEDAS -> item {
+        }
+        when (modulo.tipo) {
+            TipoModulo.LAVAGEM_MAOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { LavagemMaos(plataforma) } }
+            TipoModulo.CIRURGIA -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloCirurgia() } }
+            TipoModulo.QUESTIONARIO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloQuestionario(plataforma) } }
+            TipoModulo.LEITURA -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloLeitura(plataforma) } }
+            TipoModulo.QUEDAS -> item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     CartaoChecklist(
                         titulo = "A minha casa é segura?",
                         entradas = listOf(
@@ -784,23 +785,31 @@ fun EcraModulo(
                             "Perguntar quais medicamentos aumentam o risco",
                             "Pedir ajuda quando preciso",
                         ),
+                        idPerfil = perfil.id,
                         plataforma = plataforma,
                     )
                 }
-                TipoModulo.CRIANCAS -> item { ModuloCriancas(plataforma) }
-                TipoModulo.CONTACTOS -> item { ModuloContactos(plataforma) }
-                TipoModulo.RESUMO -> item { ModuloResumo(concluidos, saudeRepository?.modulosSaude ?: emptyList(), aoAbrir) }
-                TipoModulo.PERGUNTAS -> item { Button({ aoNavegar(SeparadorApp.NOTAS) }, Modifier.fillMaxWidth()) { Text("Preparar perguntas para o médico") } }
-                TipoModulo.MEDICAMENTOS -> item { Button({ aoNavegar(SeparadorApp.MEDICACAO) }, Modifier.fillMaxWidth()) { Text("Abrir a minha lista") } }
-                TipoModulo.INFO -> Unit
             }
-            item {
-                val feito = modulo.id in concluidos
+            TipoModulo.CRIANCAS -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloCriancas(plataforma) } }
+            TipoModulo.CONTACTOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloContactos(plataforma) } }
+            TipoModulo.RESUMO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloResumo(concluidos, saudeRepository?.modulosSaude ?: emptyList(), aoAbrir) } }
+            TipoModulo.PERGUNTAS -> item { Box(Modifier.padding(horizontal = 20.dp)) { Button({ aoNavegar(SeparadorApp.NOTAS) }, Modifier.fillMaxWidth()) { Text("Preparar perguntas para o médico") } } }
+            TipoModulo.MEDICAMENTOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { Button({ aoNavegar(SeparadorApp.MEDICACAO) }, Modifier.fillMaxWidth()) { Text("Abrir a minha lista") } } }
+            TipoModulo.INFO -> Unit
+        }
+        item {
+            val uiStateModulo = viewModel?.uiState?.collectAsState()?.value
+            val concluidosEfetivos = uiStateModulo?.modulosConcluidos ?: concluidos
+            val feito = modulo.id in concluidosEfetivos || (saudeRepository?.modulosConcluidos?.contains(modulo.id) == true)
+            Box(Modifier.padding(horizontal = 20.dp)) {
                 Button(
                     onClick = {
-                        val pts = saudeRepository?.alternarModuloComPontos(modulo.id) ?: run {
+                        val pts = if (viewModel != null) {
+                            viewModel.alternarConclusaoModulo(modulo.id)
+                        } else {
+                            val p = saudeRepository?.alternarModuloComPontos(modulo.id, perfil.id) ?: 0
                             aoAlternar(modulo.id)
-                            0
+                            p
                         }
                         if (pts > 0) {
                             mensagemPontos = "⭐ Módulo concluído! Ganhou +$pts Pontos de Segurança!"
@@ -816,6 +825,7 @@ fun EcraModulo(
             }
         }
     }
+}
 
     if (mensagemPontos != null) {
         AlertDialog(
@@ -827,7 +837,7 @@ fun EcraModulo(
                     Text(mensagemPontos.orEmpty())
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Saldo atual: ${saudeRepository?.pontosSeguranca ?: 50} pontos",
+                        "Saldo atual: ${viewModel?.uiState?.value?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50} pontos",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MarcaMedio,
@@ -848,6 +858,7 @@ private fun CartaoChecklist(
     titulo: String,
     entradas: List<String>,
     subtitulo: String? = "Checklist de Segurança do Utente",
+    idPerfil: String = "",
     plataforma: ServicosDispositivo? = null,
 ) {
     val itens = remember(titulo, entradas) {
@@ -866,6 +877,7 @@ private fun CartaoChecklist(
         subtitulo = subtitulo,
         itensPredefinidos = itens,
         chavePersistencia = "saude_${kotlin.math.abs(titulo.hashCode())}",
+        idPerfil = idPerfil,
         plataforma = plataforma,
         permiteAdicionar = true,
     )
@@ -886,7 +898,6 @@ private fun LavagemMaos(plataforma: ServicosDispositivo) {
     var aReproduzir by remember { mutableStateOf(false) }
     LaunchedEffect(aReproduzir, passo) {
         if (aReproduzir) {
-            plataforma.falar(passosLavagem[passo])
             delay(3500)
             if (passo < passosLavagem.lastIndex) passo++ else aReproduzir = false
         }
@@ -906,11 +917,10 @@ private fun LavagemMaos(plataforma: ServicosDispositivo) {
                 }) {
                     Icon(if (aReproduzir) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, null)
                     Spacer(Modifier.size(6.dp))
-                    Text(if (aReproduzir) "Pausa" else "Ver vídeo")
+                    Text(if (aReproduzir) "Pausa" else "Ver passos")
                 }
                 TextButton(onClick = {
                     passo = (passo + 1) % passosLavagem.size
-                    plataforma.falar(passosLavagem[passo])
                 }) { Text("Seguinte") }
             }
         }
@@ -965,7 +975,7 @@ private fun ModuloQuestionario(plataforma: ServicosDispositivo) {
                             val selecionado = respostas[indice] == valor
                             val correto = valor == item.resposta
                             Button(
-                                onClick = { respostas[indice] = valor; plataforma.falar(item.explicacao) },
+                                onClick = { respostas[indice] = valor },
                                 enabled = indice !in respostas,
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(
@@ -999,7 +1009,7 @@ private fun ModuloLeitura(plataforma: ServicosDispositivo) {
     CartaoApp {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Rounded.QrCodeScanner, null, tint = MarcaClaro, modifier = Modifier.size(96.dp))
-            Button(onClick = { resultado = true; plataforma.falar(texto) }, Modifier.fillMaxWidth()) { Text("Ler QR / código de barras (demonstração)") }
+            Button(onClick = { resultado = true }, Modifier.fillMaxWidth()) { Text("Ler QR / código de barras (demonstração)") }
             if (resultado) {
                 Column(Modifier.padding(top = 12.dp).background(Marca, RoundedCornerShape(16.dp)).padding(12.dp)) {
                     Text("Ramipril 5 mg", fontWeight = FontWeight.SemiBold)
@@ -1039,7 +1049,7 @@ private fun ModuloCriancas(plataforma: ServicosDispositivo) {
                     val indice = indiceLinha * 2 + indiceColuna
                     Box(
                         Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(Marca)
-                            .clickable { plataforma.falar(entrada.second); aprendeu[indice] = true },
+                            .clickable { aprendeu[indice] = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(entrada.third, entrada.first, tint = MarcaClaro, modifier = Modifier.size(60.dp))

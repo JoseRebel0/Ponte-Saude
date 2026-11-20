@@ -1,15 +1,16 @@
 package pt.ulsbe.pontesaude.data.local.entity;
 
+import androidx.annotation.NonNull;
 import androidx.room.Entity;
-import androidx.room.PrimaryKey;
 
 /**
  * Entidade Room que representa a tabela de consultas e exames médicos.
+ * Chave primária composta por id e idPerfil para isolamento rigoroso entre perfis.
  */
-@Entity(tableName = "consultas")
+@Entity(tableName = "consultas", primaryKeys = {"id", "idPerfil"})
 public class ConsultaEntity {
-    @PrimaryKey
     public int id;
+    @NonNull
     public String idPerfil;
     public String dia;
     public String mes;
@@ -21,7 +22,7 @@ public class ConsultaEntity {
     public String checklistCustomJson;
     public boolean pendenteSincronizacao;
 
-    public ConsultaEntity(int id, String idPerfil, String dia, String mes, String titulo,
+    public ConsultaEntity(int id, @NonNull String idPerfil, String dia, String mes, String titulo,
                           String localizacao, String tipo, boolean jejum,
                           String checklistMarcadosJson, String checklistCustomJson,
                           boolean pendenteSincronizacao) {

@@ -2,7 +2,6 @@ package pt.ulsbe.pontesaude.data.repository
 
 import androidx.compose.runtime.mutableStateMapOf
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
 import pt.ulsbe.pontesaude.data.local.paraEntidade
@@ -75,7 +74,7 @@ class MedicacaoRepository(
         val atuais = medicamentos(perfil).filterNot { it.id == id }
         listaMedicamentos[perfil.id] = atuais
 
-        dbLocal.medicamentoDao().apagarPorId(id)
+        dbLocal.medicamentoDao().apagarPorIdEPerfil(id, perfil.id)
 
         if (estaOnline()) {
             scope.launch {

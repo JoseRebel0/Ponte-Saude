@@ -32,8 +32,8 @@ fun PerfilEntity.paraModelo(
     notas: List<Nota> = emptyList(),
 ): Perfil {
     val produtos = outrosProdutosJson.deserializarListaString()
-    val perfisCuidados = perfisCuidadosJson.deserializarListaString()
-    val cuidadores = cuidadoresJson.deserializarListaString()
+    val perfisCuidados = perfisCuidadosJson.deserializarListaString().filter { it != id }
+    val cuidadores = cuidadoresJson.deserializarListaString().filter { it != id }
     return Perfil(
         id = id,
         nome = nome,
@@ -85,8 +85,8 @@ fun Perfil.paraEntidade(
         modulosOuvidos.serializarListaString(),
         videos.serializarListaString(),
         vouchers.serializarVouchers(),
-        perfisCuidadosIds.serializarListaString(),
-        cuidadoresIds.serializarListaString(),
+        perfisCuidadosIds.filter { it != id }.serializarListaString(),
+        cuidadoresIds.filter { it != id }.serializarListaString(),
         pendente,
     )
 }

@@ -3,9 +3,7 @@ package pt.ulsbe.pontesaude.ui.screens.medicacao
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,15 +34,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
-import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddAPhoto
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CameraAlt
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.HealthAndSafety
@@ -99,7 +94,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.util.ProcessadorImagem
-import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.MedicacaoRepository
 import pt.ulsbe.pontesaude.data.repository.NotaRepository
@@ -115,7 +109,6 @@ import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.MarcaProfundo
 import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
-import java.io.ByteArrayOutputStream
 
 fun formatarHoraParaFala(hora: String): String {
     val partes = hora.split(":")
@@ -132,8 +125,6 @@ fun formatarHoraParaFala(hora: String): String {
     }
     return "às $hora"
 }
-
-fun formatTimeForSpeech(time: String): String = formatarHoraParaFala(time)
 
 /**
  * Ecrã de Medicação moderno, clínico e acessível.
@@ -164,9 +155,6 @@ fun EcraMedicacao(
     } else {
         medicacaoRepository?.medicamentos(perfil) ?: perfil.medicamentos
     }
-    LaunchedEffect(perfil.id) {
-        viewModel?.recarregar()
-    }
     var aAtualizarLocal by remember { mutableStateOf(false) }
     val aAtualizar = uiState?.emCarregamento ?: aAtualizarLocal
     val escopo = rememberCoroutineScope()
@@ -189,26 +177,39 @@ fun EcraMedicacao(
     var erroExplicacaoIa by remember { mutableStateOf<String?>(null) }
     var avisoSemInternetMedicacao by remember { mutableStateOf(false) }
 
-    fun pedirExplicacaoIa(med: Medicamento) {
+    LaunchedEffect(perfil.id) {
+        viewModel?.recarregar()
+        mostrarDialogoFormulario = false
+        medicamentoEmEdicao = null
+        pendenteApagar = null
+        medicamentoParaFoto = null
+        medicamentoParaVerFoto = null
+        confirmarRemoverFotoMed = null
+        medParaExplicarIa = null
+        textoExplicacaoIa = null
+        erroExplicacaoIa = null
+    }
+
+    val pedirExplicacaoIa: (Medicamento) -> Unit = { med ->
         if (!plataforma.temConexaoInternet()) {
             avisoSemInternetMedicacao = true
-            return
-        }
-        medParaExplicarIa = med
-        if (viewModel != null) {
-            viewModel.pedirExplicacaoIa(med.nome)
         } else {
-            textoExplicacaoIa = null
-            erroExplicacaoIa = null
-            aCarregarExplicacaoIa = true
-            escopo.launch {
-                val resultado = medicacaoRepository?.explicarMedicamentoComIa(med.nome) ?: Result.failure(Exception("Serviço indisponível no momento."))
-                resultado.onSuccess { explicacao ->
-                    textoExplicacaoIa = explicacao
-                }.onFailure { erro ->
-                    erroExplicacaoIa = erro.localizedMessage ?: erro.message.orEmpty()
+            medParaExplicarIa = med
+            if (viewModel != null) {
+                viewModel.pedirExplicacaoIa(med.nome)
+            } else {
+                textoExplicacaoIa = null
+                erroExplicacaoIa = null
+                aCarregarExplicacaoIa = true
+                escopo.launch {
+                    val resultado = medicacaoRepository?.explicarMedicamentoComIa(med.nome) ?: Result.failure(Exception("Serviço indisponível no momento."))
+                    resultado.onSuccess { explicacao ->
+                        textoExplicacaoIa = explicacao
+                    }.onFailure { erro ->
+                        erroExplicacaoIa = erro.localizedMessage ?: erro.message.orEmpty()
+                    }
+                    aCarregarExplicacaoIa = false
                 }
-                aCarregarExplicacaoIa = false
             }
         }
     }
@@ -275,10 +276,11 @@ fun EcraMedicacao(
     }
     val estadoLista = rememberLazyListState()
 
+    val modoCuidadorAtivo = uiState?.modoCuidador ?: (perfilRepository?.modoCuidador == true)
+    val tituloEcra = if (modoCuidadorAtivo) "Medicação · ${perfil.nome}" else "Medicação"
+    val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Gestor visual e alarmes"
+
     Column(Modifier.fillMaxSize()) {
-        val modoCuidadorAtivo = uiState?.modoCuidador ?: (perfilRepository?.modoCuidador == true)
-        val tituloEcra = if (modoCuidadorAtivo) "Medicação · ${perfil.nome}" else "Medicação"
-        val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Gestor visual e alarmes"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
 
         PullToRefreshBox(
@@ -295,18 +297,20 @@ fun EcraMedicacao(
                     }
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxSize(),
                 state = estadoLista,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // 1. FICHA DA CONTA CLÍNICA EM MODO CUIDADOR
-                if (perfilRepository?.modoCuidador == true) {
-                    item {
+            if (perfilRepository?.modoCuidador == true) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
@@ -373,9 +377,11 @@ fun EcraMedicacao(
                         }
                     }
                 }
+            }
 
-                // 2. DASHBOARD HUD POLIDO (SEM TEXTO AMONTOADO NEM CORTE)
-                item {
+            // 2. DASHBOARD HUD POLIDO (SEM TEXTO AMONTOADO NEM CORTE)
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
@@ -538,9 +544,11 @@ fun EcraMedicacao(
                         }
                     }
                 }
+            }
 
-                // 3. AVISO DE DUPLICAÇÃO DE PRINCÍPIO ATIVO
-                items(duplicados) { duplicado ->
+            // 3. AVISO DE DUPLICAÇÃO DE PRINCÍPIO ATIVO
+            items(duplicados) { duplicado ->
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -570,10 +578,12 @@ fun EcraMedicacao(
                         }
                     }
                 }
+            }
 
-                // 4. LISTA DE MEDICAMENTOS COM DESIGN CLÍNICO, MÚLTIPLOS HORÁRIOS E BOTÃO DE EDITAR
-                if (medicamentosFiltrados.isEmpty()) {
-                    item {
+            // 4. LISTA DE MEDICAMENTOS COM DESIGN CLÍNICO, MÚLTIPLOS HORÁRIOS E BOTÃO DE EDITAR
+            if (medicamentosFiltrados.isEmpty()) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp),
@@ -594,13 +604,15 @@ fun EcraMedicacao(
                             }
                         }
                     }
-                } else {
-                    items(medicamentosFiltrados, key = { it.id }) { medicamento ->
-                        val bitmap = remember(medicamento.fotografia) {
-                            ProcessadorImagem.descodificarBitmap(contexto, medicamento.id, medicamento.fotografia)
-                        }
-                        val corPill = Color(medicamento.cor)
+                }
+            } else {
+                items(medicamentosFiltrados, key = { it.id }) { medicamento ->
+                    val bitmap = remember(medicamento.fotografia) {
+                        ProcessadorImagem.descodificarBitmap(contexto, medicamento.id, medicamento.fotografia)
+                    }
+                    val corPill = Color(medicamento.cor)
 
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(20.dp),
@@ -833,32 +845,6 @@ fun EcraMedicacao(
                                     }
                                 }
 
-                                // BOTÃO ADICIONAR FOTO DA CAIXA (quando ainda não tem)
-                                if (bitmap == null) {
-                                    OutlinedButton(
-                                        onClick = { medicamentoParaFoto = medicamento },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = MarcaMedio,
-                                        ),
-                                        border = BorderStroke(1.dp, MarcaMedio.copy(alpha = 0.35f)),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Rounded.AddAPhoto,
-                                            contentDescription = null,
-                                            tint = MarcaMedio,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            "Adicionar foto da caixa",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                    }
-                                }
 
                                 // BOTÃO EXPLICAR COM IA
                                 Button(
@@ -942,9 +928,14 @@ fun EcraMedicacao(
                         }
                     }
                 }
+            }
 
-                // 5. BOTÕES PRINCIPAIS: ADICIONAR MEDICAMENTO + PARTILHAR LISTA
-                item {
+            // 5. BOTÕES PRINCIPAIS: ADICIONAR MEDICAMENTO + PARTILHAR LISTA
+            item {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -990,8 +981,6 @@ fun EcraMedicacao(
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
-
                     OutlinedButton(
                         onClick = {
                             val (uri, nome) = plataforma.gerarEGuardarPdfMedicacao(perfil, medicamentos, uiState?.produtos ?: notaRepository?.produtos(perfil) ?: perfil.outrosProdutos)
@@ -1012,10 +1001,12 @@ fun EcraMedicacao(
                         Text("Baixar Guia em PDF", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
 
-                // 6. OUTROS PRODUTOS & SUPLEMENTOS NATURAIS (LAYOUT LIMPO SEM ESPAÇOS MORTOS)
-                item {
-                    val produtos = uiState?.produtos ?: uiState?.produtos ?: notaRepository?.produtos(perfil) ?: perfil.outrosProdutos
+            // 6. OUTROS PRODUTOS & SUPLEMENTOS NATURAIS (LAYOUT LIMPO SEM ESPAÇOS MORTOS)
+            item {
+                val produtos = uiState?.produtos ?: uiState?.produtos ?: notaRepository?.produtos(perfil) ?: perfil.outrosProdutos
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
@@ -1201,9 +1192,11 @@ fun EcraMedicacao(
                         }
                     }
                 }
+            }
 
-                // NOTA INFORMATIVA FINAL
-                item {
+            // NOTA INFORMATIVA FINAL
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1222,6 +1215,7 @@ fun EcraMedicacao(
             }
         }
     }
+}
 
     // DIÁLOGO UNIFICADO PARA ADICIONAR OU EDITAR MEDICAMENTO COM SUPORTE A MÚLTIPLOS HORÁRIOS
     if (mostrarDialogoFormulario) {
@@ -2055,7 +2049,6 @@ fun DialogoFormularioMedicamento(
                                     principioAtivo = "metformina"
                                     laboratorio = "Generis"
                                     listaHoras = listOf("08:00", "20:00")
-                                    plataforma.falar("Código detetado: Metformina 850 miligramas, duas tomas ao dia.")
                                 },
                                 modifier = Modifier
                                     .weight(1f)

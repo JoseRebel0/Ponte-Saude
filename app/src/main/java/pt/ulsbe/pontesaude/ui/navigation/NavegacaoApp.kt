@@ -211,7 +211,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                                 configuracaoRepository = container.configuracao,
                                 plataforma = plataforma,
                                 aoAbrirModulo = { moduloAberto = it },
-                                aoAlternarModulo = { idMod -> container.saude.alternarModulo(idMod, perfil.id) },
+                                aoAlternarModulo = { idMod -> saudeViewModel.alternarConclusaoModulo(idMod) },
                                 aoNavegar = navegarPara,
                             )
                             SeparadorApp.CONSULTAS -> EcraConsultas(
