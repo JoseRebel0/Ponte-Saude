@@ -57,8 +57,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Firebase BoM, Cloud Firestore e Firebase AI Logic (Gemini Developer API)
+    // Firebase BoM, Cloud Firestore, Firebase Auth e Firebase AI Logic (Gemini Developer API)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-ai:18.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

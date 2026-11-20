@@ -120,6 +120,7 @@ fun EcraLoginCMD(
     aoAutenticar: (String) -> Unit,
 ) {
     val uiState = viewModel?.uiState?.collectAsState()?.value
+    val perfisDemonstracao = uiState?.perfisDisponiveis.takeUnless { it.isNullOrEmpty() } ?: perfilRepository?.todosOsPerfis.orEmpty()
     val teclado = LocalSoftwareKeyboardController.current
     val escopo = rememberCoroutineScope()
 
@@ -154,23 +155,31 @@ fun EcraLoginCMD(
     var aApagarPerfis by remember { mutableStateOf(false) }
     var mensagemSucesso by remember { mutableStateOf<String?>(null) }
 
-    // Procedimento de Login Simulado com Feedback de Carregamento
+    // Procedimento de Login Simulado com Feedback de Carregamento e Firebase Auth Seguro
     fun executarAutenticacao(idPerfil: String) {
         teclado?.hide()
         mensagemErro = null
         emProgresso = true
         escopo.launch {
             textoProgresso = "A ligar a Autenticação.gov..."
-            delay(400)
-            textoProgresso = "A validar Chave Móvel Digital e permissões..."
-            delay(450)
+            delay(300)
+            val ident: String = when {
+                passo == 2 && modoId == ModoIdentificacao.TELEMOVEL -> telemovel
+                passo == 2 -> nif
+                else -> perfisDemonstracao.find { it.id == idPerfil }?.telemovel?.ifBlank { idPerfil } ?: idPerfil
+            }
+            textoProgresso = "A validar Chave Móvel Digital..."
+            pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD.autenticarComCMD(ident)
+            delay(350)
             textoProgresso = "A carregar ficha de utente do SNS..."
-            delay(400)
+            sincronizador?.sincronizarComFirestore()
+            delay(300)
             emProgresso = false
             if (viewModel != null) {
                 viewModel.selecionarPerfil(idPerfil)
-                viewModel.concluirAutenticacao(aoAutenticar)
+                viewModel.concluirAutenticacao(aoAutenticar, ident)
             } else {
+                perfilRepository?.iniciarSessaoCMD(idPerfil, ident)
                 aoAutenticar(idPerfil)
             }
         }
@@ -772,6 +781,8 @@ fun EcraLoginCMD(
                                     onClick = {
                                         escopo.launch {
                                             sincronizador?.sincronizarAutomatico(true)
+                                            perfilRepository?.carregarPerfisLocais()
+                                            viewModel?.recarregar()
                                         }
                                     },
                                     modifier = Modifier.size(36.dp),
@@ -800,8 +811,6 @@ fun EcraLoginCMD(
                             )
 
                             // Seletor de Perfis de Teste
-                            val perfisDemonstracao = uiState?.perfisDisponiveis.takeUnless { it.isNullOrEmpty() } ?: perfilRepository?.todosOsPerfis.orEmpty()
-
                             if (perfisDemonstracao.isEmpty()) {
                                 Surface(
                                     color = Superficie,
@@ -881,13 +890,14 @@ fun EcraLoginCMD(
                                                 onClick = {
                                                     escopo.launch {
                                                         perfilRepository?.apagarPerfil(perfil.id)
-                                                        val restante = perfisDemonstracao.firstOrNull()
+                                                        viewModel?.recarregar()
+                                                        val restante = perfisDemonstracao.firstOrNull { it.id != perfil.id }
                                                         perfilEscolhidoId = restante?.id ?: "1"
                                                         if (restante != null) {
                                                             telemovel = restante.telemovel.replace("+351 ", "")
                                                             nif = restante.nif
                                                         }
-                                                        mensagemSucesso = "Perfil '${perfil.nome}' apagado."
+                                                        mensagemSucesso = "Perfil '${perfil.nome}' eliminado do Firebase Auth e Firestore."
                                                     }
                                                 },
                                                 modifier = Modifier.size(28.dp),
@@ -911,13 +921,14 @@ fun EcraLoginCMD(
                                     mensagemSucesso = null
                                     escopo.launch {
                                         try {
-                                            val criado = if (viewModel != null) { viewModel.criarPerfilAleatorio(); null } else perfilRepository?.criarPerfilAleatorio()
+                                            val criado = perfilRepository?.criarPerfilAleatorio()
+                                            viewModel?.recarregar()
                                             if (criado != null) {
                                                 perfilEscolhidoId = criado.id
                                                 telemovel = criado.telemovel.replace("+351 ", "")
                                                 nif = criado.nif
                                                 pinCMD = "1234"
-                                                mensagemSucesso = "Perfil '${criado.nome}' criado com sucesso no Firebase!"
+                                                mensagemSucesso = "Perfil '${criado.nome}' gerado pela IA com sucesso!"
                                             }
                                         } catch (e: Exception) {
                                             mensagemSucesso = "Erro ao criar perfil: ${e.localizedMessage}"
@@ -940,30 +951,31 @@ fun EcraLoginCMD(
                                         strokeWidth = 2.dp,
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text("A gerar perfil no Firebase...", fontWeight = FontWeight.SemiBold)
+                                    Text("A gerar perfil clínico com IA...", fontWeight = FontWeight.SemiBold)
                                 } else {
                                     Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Criar Perfil Aleatório no Firebase", fontWeight = FontWeight.SemiBold)
+                                    Text("Gerar Perfil com IA no Firebase", fontWeight = FontWeight.SemiBold)
                                 }
                             }
 
                             // Botão Simples para Apagar Perfis Aleatórios (1 Clique, Sem Confirmação)
-                            if (perfisDemonstracao.any { it.email.endsWith("@exemplo.pt") || it.id != "1" }) {
+                            if (perfisDemonstracao.any { it.id !in setOf("1", "2") }) {
                                 OutlinedButton(
                                     onClick = {
                                         aApagarPerfis = true
                                         mensagemSucesso = null
                                         escopo.launch {
                                             try {
-                                                val apagados = if (viewModel != null) { viewModel.limparPerfisDemonstracao(); 0 } else perfilRepository?.apagarPerfisAleatorios() ?: 0
-                                                val rest = perfisDemonstracao.firstOrNull()
+                                                val apagados = perfilRepository?.apagarPerfisAleatorios() ?: 0
+                                                viewModel?.recarregar()
+                                                val rest = perfisDemonstracao.firstOrNull { it.id in setOf("1", "2") } ?: perfisDemonstracao.firstOrNull()
                                                 perfilEscolhidoId = rest?.id ?: "1"
                                                 if (rest != null) {
                                                     telemovel = rest.telemovel.replace("+351 ", "")
                                                     nif = rest.nif
                                                 }
-                                                mensagemSucesso = if (apagados > 0) "$apagados perfis aleatórios apagados com sucesso." else "Nenhum perfil aleatório para apagar."
+                                                mensagemSucesso = if (apagados > 0) "$apagados perfis eliminados do Firebase Auth e Firestore." else "Nenhum perfil de teste para apagar."
                                             } catch (e: Exception) {
                                                 mensagemSucesso = "Erro ao apagar perfis: ${e.localizedMessage}"
                                             } finally {

@@ -10,12 +10,12 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
-import pt.ulsbe.pontesaude.data.local.deserializarListaString
 import pt.ulsbe.pontesaude.data.local.paraEntidade
 import pt.ulsbe.pontesaude.data.local.paraModelo
+import pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
+import pt.ulsbe.pontesaude.data.remote.IntegracaoIA
 import pt.ulsbe.pontesaude.model.Perfil
-import pt.ulsbe.pontesaude.util.GeradorDadosPortugal
 
 /**
  * Repositório de Perfis Clínicos, Sessão CMD (Chave Móvel Digital) e Modo Cuidador.
@@ -29,6 +29,7 @@ class PerfilRepository(
     private val clienteFirestore: ClienteFirestore,
     private val scope: CoroutineScope,
     private val estaOnline: () -> Boolean,
+    private val integracaoIa: IntegracaoIA = IntegracaoIA(),
 ) {
     private val preferencias: SharedPreferences =
         context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
@@ -37,6 +38,9 @@ class PerfilRepository(
         private set
 
     var utenteSessaoId by mutableStateOf(preferencias.getString("cmd_utente_id", "1") ?: "1")
+        private set
+
+    var identificadorCMD by mutableStateOf(preferencias.getString("cmd_identificador", "") ?: "")
         private set
 
     var modoCuidador by mutableStateOf(preferencias.getBoolean("caregiver", false))
@@ -85,22 +89,29 @@ class PerfilRepository(
             }
         }
 
-    fun iniciarSessaoCMD(idPerfil: String) {
+    fun iniciarSessaoCMD(idPerfil: String, identificador: String = "") {
         autenticado = true
         utenteSessaoId = idPerfil
+        if (identificador.isNotBlank()) {
+            identificadorCMD = identificador
+        }
         preferencias.edit()
             .putBoolean("cmd_autenticado", true)
             .putString("cmd_utente_id", idPerfil)
+            .putString("cmd_identificador", identificadorCMD)
             .apply()
         atualizarListaPessoasCuidadas()
     }
 
     fun terminarSessaoCMD() {
         autenticado = false
+        identificadorCMD = ""
         preferencias.edit()
             .putBoolean("cmd_autenticado", false)
             .remove("cmd_utente_id")
+            .remove("cmd_identificador")
             .apply()
+        AutenticadorFirebaseCMD.terminarSessao()
     }
 
     fun atualizarModoCuidador(valor: Boolean) {
@@ -114,23 +125,24 @@ class PerfilRepository(
     }
 
     fun atualizarListaPessoasCuidadas() {
-        val idsCuidados = perfilSessao.perfisCuidadosIds
-        val encontrados = todosOsPerfis.filter { it.id in idsCuidados }
+        val idsCuidados = perfilSessao.perfisCuidadosIds.filter { it != perfilSessao.id }
+        val encontrados = todosOsPerfis.filter { it.id in idsCuidados && it.id != perfilSessao.id }
         pessoasCuidadas.clear()
         pessoasCuidadas.addAll(encontrados)
     }
 
-    private fun proximoIdPerfil(): String {
-        val gravado = preferencias.getLong("contador_id_perfil", 0L)
-        val maiorAtual = todosOsPerfis.mapNotNull { it.id.toLongOrNull() }.maxOrNull() ?: 0L
-        val proximo = maxOf(gravado, maiorAtual) + 1L
-        preferencias.edit().putLong("contador_id_perfil", proximo).apply()
-        return proximo.toString()
+    private fun gerarTelemovelAleatorio(): String {
+        val random = java.util.Random()
+        return "+351 91${random.nextInt(10)} ${100 + random.nextInt(900)} ${100 + random.nextInt(900)}"
     }
 
-    fun criarPerfilAleatorio(): Perfil {
-        val proximoId = proximoIdPerfil()
-        val novo = GeradorDadosPortugal.gerarPerfilAleatorio(proximoId)
+    suspend fun criarPerfilAleatorio(): Perfil {
+        val telemovelGerado = gerarTelemovelAleatorio()
+        val uid = AutenticadorFirebaseCMD.criarOuObterConta(telemovelGerado)
+
+        // Gerar perfil clínico completo 100% dinâmico com IA (Gemini)
+        val novo = integracaoIa.gerarPerfilClinicoComIA(id = uid, telemovel = telemovelGerado).getOrThrow()
+
         val online = estaOnline()
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), pendente = !online)
 
@@ -138,10 +150,8 @@ class PerfilRepository(
         todosOsPerfis.add(novo)
 
         if (online) {
-            scope.launch {
-                runCatching {
-                    clienteFirestore.salvarPerfilCompleto(novo)
-                }
+            runCatching {
+                clienteFirestore.salvarPerfilCompleto(novo)
             }
         }
         atualizarListaPessoasCuidadas()
@@ -157,14 +167,14 @@ class PerfilRepository(
         tipoSanguineo: String = "A+",
         alergias: String = "Sem alergias conhecidas",
     ): Perfil {
-        val proximoId = proximoIdPerfil()
+        val idCuidado = "cuidado_${System.currentTimeMillis()}"
         val nomeTrim = nome.trim()
         val partes = nomeTrim.split(" ").filter { it.isNotBlank() }
         val nomeCurto = if (partes.size > 1) "${partes.first()} ${partes.last()}" else nomeTrim
         val iniciais = partes.mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "CU" }
 
         val novoPerfil = Perfil(
-            id = proximoId,
+            id = idCuidado,
             nome = nomeTrim,
             nomeCurto = nomeCurto,
             relacao = relacao.ifBlank { "Utente" },
@@ -177,6 +187,7 @@ class PerfilRepository(
             dataNascimento = "01/01/1950",
             telemovel = telemovel.ifBlank { "+351 912 345 678" },
             email = "cuidado@ulsbe.min-saude.pt",
+            cuidadoresIds = listOf(utenteSessaoId).filter { it != idCuidado },
         )
 
         val online = estaOnline()
@@ -200,8 +211,8 @@ class PerfilRepository(
         val meuPerfil = todosOsPerfis.find { it.id == utenteSessaoId } ?: return
         val outroPerfil = todosOsPerfis.find { it.id == idCuidado } ?: return
 
-        val novosCuidados = (meuPerfil.perfisCuidadosIds + idCuidado).distinct()
-        val novosCuidadores = (outroPerfil.cuidadoresIds + utenteSessaoId).distinct()
+        val novosCuidados = (meuPerfil.perfisCuidadosIds + idCuidado).filter { it != utenteSessaoId }.distinct()
+        val novosCuidadores = (outroPerfil.cuidadoresIds + utenteSessaoId).filter { it != idCuidado }.distinct()
 
         val meuAtualizado = meuPerfil.copy(perfisCuidadosIds = novosCuidados)
         val outroAtualizado = outroPerfil.copy(cuidadoresIds = novosCuidadores)
@@ -235,7 +246,7 @@ class PerfilRepository(
         val meuPerfil = todosOsPerfis.find { it.id == utenteSessaoId } ?: return
         val outroPerfil = todosOsPerfis.find { it.id == idCuidado }
 
-        val novosCuidados = meuPerfil.perfisCuidadosIds.filter { it != idCuidado }
+        val novosCuidados = meuPerfil.perfisCuidadosIds.filter { it != idCuidado && it != utenteSessaoId }
         val meuAtualizado = meuPerfil.copy(perfisCuidadosIds = novosCuidados)
 
         val idxMeu = todosOsPerfis.indexOfFirst { it.id == utenteSessaoId }
@@ -245,7 +256,7 @@ class PerfilRepository(
         dbLocal.perfilDao().inserirOuAtualizar(meuAtualizado.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), pendente = !online))
 
         if (outroPerfil != null) {
-            val novosCuidadores = outroPerfil.cuidadoresIds.filter { it != utenteSessaoId }
+            val novosCuidadores = outroPerfil.cuidadoresIds.filter { it != utenteSessaoId && it != idCuidado }
             val outroAtualizado = outroPerfil.copy(cuidadoresIds = novosCuidadores)
             val idxOutro = todosOsPerfis.indexOfFirst { it.id == idCuidado }
             if (idxOutro >= 0) todosOsPerfis[idxOutro] = outroAtualizado
@@ -265,7 +276,10 @@ class PerfilRepository(
 
     fun removerPessoaCuidada(id: String) = desassociarPerfilCuidado(id)
 
-    fun apagarPerfil(idPerfil: String) {
+    suspend fun apagarPerfil(idPerfil: String) {
+        val perfil = todosOsPerfis.find { it.id == idPerfil }
+        val identificadorParaAuth = perfil?.telemovel?.ifBlank { idPerfil } ?: idPerfil
+
         todosOsPerfis.removeAll { it.id == idPerfil }
         dbLocal.perfilDao().apagar(idPerfil)
         dbLocal.medicamentoDao().apagarPorPerfil(idPerfil)
@@ -281,18 +295,21 @@ class PerfilRepository(
         editor.apply()
 
         if (estaOnline()) {
-            scope.launch {
-                runCatching {
-                    clienteFirestore.apagarPerfil(idPerfil)
-                }
+            runCatching {
+                clienteFirestore.apagarPerfil(idPerfil)
+            }
+            runCatching {
+                AutenticadorFirebaseCMD.eliminarContaAuth(identificadorParaAuth)
             }
         }
         atualizarListaPessoasCuidadas()
     }
 
-    fun apagarPerfisAleatorios(): Int {
+    suspend fun apagarPerfisAleatorios(): Int {
         val aleatorios = todosOsPerfis.filter { it.id !in setOf("1", "2") }
-        val idsParaApagar = aleatorios.map { it.id }
+        if (aleatorios.isEmpty()) return 0
+        val perfisParaApagar = aleatorios.toList()
+        val idsParaApagar = perfisParaApagar.map { it.id }
 
         todosOsPerfis.removeAll { it.id in idsParaApagar }
         val editor = preferencias.edit()
@@ -308,9 +325,13 @@ class PerfilRepository(
         editor.apply()
 
         if (estaOnline()) {
-            scope.launch {
+            runCatching {
+                clienteFirestore.apagarPerfisEmMassa(idsParaApagar)
+            }
+            for (p in perfisParaApagar) {
                 runCatching {
-                    clienteFirestore.apagarPerfisEmMassa(idsParaApagar)
+                    val ident = p.telemovel.ifBlank { p.id }
+                    AutenticadorFirebaseCMD.eliminarContaAuth(ident)
                 }
             }
         }

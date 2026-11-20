@@ -36,18 +36,6 @@ class ApiConsultasRemoto(
     }
 
     /**
-     * Remove uma consulta da subcoleção do perfil no Firestore.
-     */
-    suspend fun removerConsulta(idPerfil: String, idConsulta: Int) = withContext(Dispatchers.IO) {
-        db.collection("perfis")
-            .document(idPerfil)
-            .collection("consultas")
-            .document(idConsulta.toString())
-            .delete()
-            .await()
-    }
-
-    /**
      * Atualiza toda a lista de consultas de um perfil no Firestore.
      */
     suspend fun atualizarConsultas(idPerfil: String, consultas: List<Consulta>) = withContext(Dispatchers.IO) {

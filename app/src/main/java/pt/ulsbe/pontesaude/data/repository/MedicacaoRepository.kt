@@ -2,7 +2,6 @@ package pt.ulsbe.pontesaude.data.repository
 
 import androidx.compose.runtime.mutableStateMapOf
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
 import pt.ulsbe.pontesaude.data.local.paraEntidade

@@ -39,21 +39,6 @@ class ApiMedicacaoRemoto(
     }
 
     /**
-     * Atualiza diretamente o campo "fotografia" do medicamento na Cloud Firestore.
-     */
-    suspend fun atualizarImagemMedicamento(idPerfil: String, idMedicamento: Long, fotografiaBase64: String) = withContext(Dispatchers.IO) {
-        val campos = mapOf(
-            "fotografia" to fotografiaBase64,
-        )
-        db.collection("perfis")
-            .document(idPerfil)
-            .collection("medicamentos")
-            .document(idMedicamento.toString())
-            .set(campos, SetOptions.merge())
-            .await()
-    }
-
-    /**
      * Remove um medicamento da subcoleção do perfil no Firestore.
      */
     suspend fun removerMedicamento(idPerfil: String, idMedicamento: Long) = withContext(Dispatchers.IO) {

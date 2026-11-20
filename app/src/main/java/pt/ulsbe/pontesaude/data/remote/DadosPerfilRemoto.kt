@@ -15,6 +15,7 @@ data class DadosPerfilRemoto(
     val videosAssistidos: List<String>,
     val vouchersResgatados: List<VoucherResgatado>,
     val checklistsConsultas: Map<Int, Pair<List<String>, List<String>>>,
+    val donoUid: String = "",
 )
 
 /**
@@ -24,6 +25,7 @@ data class DadosPerfilRemoto(
 
 data class PerfilDtoRemoto(
     val id: String = "",
+    val donoUid: String = "",
     val nome: String = "",
     val nomeCurto: String = "",
     val relacao: String = "",

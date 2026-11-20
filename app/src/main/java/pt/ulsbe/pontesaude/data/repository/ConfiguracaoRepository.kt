@@ -51,16 +51,6 @@ class ConfiguracaoRepository(context: Context) {
         preferencias.edit().putBoolean("reduce_motion", valor).apply()
     }
 
-    fun atualizarAltoContraste(valor: Boolean) {
-        altoContraste = valor
-        preferencias.edit().putBoolean("alto_contraste", valor).apply()
-    }
-
-    fun atualizarSomVoz(valor: Boolean) {
-        somVozAtivo = valor
-        preferencias.edit().putBoolean("som_voz_ativo", valor).apply()
-    }
-
     fun atualizarNotificacoesAtivas(valor: Boolean) {
         notificacoesAtivas = valor
         preferencias.edit().putBoolean("notificacoes_ativas", valor).apply()

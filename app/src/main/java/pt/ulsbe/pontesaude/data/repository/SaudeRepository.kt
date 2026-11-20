@@ -181,9 +181,6 @@ class SaudeRepository(
         return 0
     }
 
-    fun marcarModuloOuvido(id: String, idPerfil: String = ""): Int =
-        premiarOuvirModulo(id, idPerfil)
-
     fun premiarVerVideo(idVideo: String, idPerfil: String = ""): Int {
         if (idVideo !in videosAssistidos) {
             videosAssistidos.add(idVideo)
@@ -194,9 +191,6 @@ class SaudeRepository(
         }
         return 0
     }
-
-    fun marcarVideoAssistido(id: String, idPerfil: String = ""): Int =
-        premiarVerVideo(id, idPerfil)
 
     fun adicionarPontos(quantidade: Int, idPerfil: String = "") {
         pontosSeguranca = (pontosSeguranca + quantidade).coerceAtLeast(0)

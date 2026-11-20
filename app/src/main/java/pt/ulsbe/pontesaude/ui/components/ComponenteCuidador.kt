@@ -814,7 +814,7 @@ fun SecaoModoCuidador(
         // ==========================================
         // 2. CUIDADORES QUE CUIDAM DE MIM (cuidadoresIds)
         // ==========================================
-        val cuidadoresDeMim = repositorio.todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds }
+        val cuidadoresDeMim = repositorio.todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds && it.id != perfilSessao.id }
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),

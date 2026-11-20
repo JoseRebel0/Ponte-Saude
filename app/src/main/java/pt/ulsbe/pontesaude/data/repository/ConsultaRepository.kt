@@ -54,66 +54,8 @@ class ConsultaRepository(
         }
     }
 
-    fun atualizarConsultas(perfil: Perfil, atualizadas: List<Consulta>) {
-        listaConsultas[perfil.id] = atualizadas
-
-        val online = estaOnline()
-        val entidades = atualizadas.map { it.paraEntidade(perfil.id, pendente = !online) }
-        dbLocal.consultaDao().apagarPorPerfil(perfil.id)
-        dbLocal.consultaDao().inserirVarios(entidades)
-
-        if (online) {
-            scope.launch {
-                runCatching {
-                    clienteFirestore.atualizarConsultas(perfil.id, atualizadas)
-                }
-            }
-        }
-    }
-
     fun agendarConsulta(perfil: Perfil, consulta: Consulta) =
         adicionarConsulta(perfil, consulta)
-
-    fun cancelarConsulta(perfil: Perfil, id: Int) {
-        val atuais = consultas(perfil).filterNot { it.id == id }
-        atualizarConsultas(perfil, atuais)
-    }
-
-    fun atualizarChecklist(idConsulta: Int, item: String, marcado: Boolean, idPerfil: String) {
-        val consEnt = dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
-        if (consEnt != null) {
-            val marcados = consEnt.checklistMarcadosJson.deserializarListaString().toMutableSet()
-            if (marcado) marcados.add(item) else marcados.remove(item)
-            consEnt.checklistMarcadosJson = marcados.toList().serializarListaString()
-            consEnt.pendenteSincronizacao = !estaOnline()
-            dbLocal.consultaDao().inserirOuAtualizar(consEnt)
-
-            if (estaOnline()) {
-                scope.launch {
-                    runCatching {
-                        clienteFirestore.atualizarChecklistConsulta(idPerfil, idConsulta, marcados.toList())
-                    }
-                }
-            }
-        }
-    }
-
-    fun atualizarChecklistCustom(idConsulta: Int, itens: List<String>, idPerfil: String) {
-        val consEnt = dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
-        if (consEnt != null) {
-            consEnt.checklistCustomJson = itens.serializarListaString()
-            consEnt.pendenteSincronizacao = !estaOnline()
-            dbLocal.consultaDao().inserirOuAtualizar(consEnt)
-
-            if (estaOnline()) {
-                scope.launch {
-                    runCatching {
-                        clienteFirestore.atualizarChecklistCustomConsulta(idPerfil, idConsulta, itens)
-                    }
-                }
-            }
-        }
-    }
 
     fun obterChecklistSalva(idConsulta: Int, idPerfil: String): Set<String> {
         val cons = if (idPerfil.isNotBlank()) {

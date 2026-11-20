@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
 import pt.ulsbe.pontesaude.data.local.paraEntidade
+import pt.ulsbe.pontesaude.data.local.paraModelo
+import pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
 import pt.ulsbe.pontesaude.data.remote.IntegracaoIA
 import pt.ulsbe.pontesaude.model.Perfil
@@ -45,7 +47,7 @@ class AppContainer(context: Context) {
         private set
 
     val configuracao = ConfiguracaoRepository(context)
-    val perfil = PerfilRepository(context, dbLocal, clienteFirestore, scope, estaOnline = { estaOnline })
+    val perfil = PerfilRepository(context, dbLocal, clienteFirestore, scope, estaOnline = { estaOnline }, integracaoIa = integracaoIa)
     val medicacao = MedicacaoRepository(dbLocal, clienteFirestore, integracaoIa, scope, estaOnline = { estaOnline })
     val consultas = ConsultaRepository(dbLocal, clienteFirestore, scope, estaOnline = { estaOnline })
     val saude = SaudeRepository(context, dbLocal, clienteFirestore, integracaoIa, scope, estaOnline = { estaOnline })
@@ -71,6 +73,11 @@ class AppContainer(context: Context) {
         scope.launch(Dispatchers.IO) {
             saude.carregarCatalogoLocal()
             perfil.carregarPerfisLocais()
+
+            val ident = perfil.identificadorCMD
+            if (ident.isNotBlank() && !AutenticadorFirebaseCMD.estaAutenticado) {
+                runCatching { AutenticadorFirebaseCMD.autenticarComCMD(ident) }
+            }
 
             for (p in perfil.todosOsPerfis) {
                 medicacao.carregarDadosLocais(p.id)
@@ -141,13 +148,25 @@ class AppContainer(context: Context) {
         }
 
         val remotosCompletos = clienteFirestore.carregarTodosOsPerfis().getOrNull().orEmpty()
-        if (remotosCompletos.isNotEmpty()) {
-            val remotos = remotosCompletos.map { it.perfil }
-            withContext(Dispatchers.Main) {
-                perfil.todosOsPerfis.clear()
-                perfil.todosOsPerfis.addAll(remotos)
-                perfil.atualizarListaPessoasCuidadas()
+        val remotos = remotosCompletos.map { it.perfil }
 
+        withContext(Dispatchers.Main) {
+            if (perfil.autenticado) {
+                if (remotos.isNotEmpty()) {
+                    perfil.todosOsPerfis.clear()
+                    perfil.todosOsPerfis.addAll(remotos)
+                    perfil.atualizarListaPessoasCuidadas()
+                }
+            } else {
+                // No ecrã de login / demonstração: preservar TODOS os perfis existentes no Room local e integrar os remotos
+                val locaisRoom = dbLocal.perfilDao().obterTodos().map { it.paraModelo() }
+                val mapaUnificado = (locaisRoom + perfil.todosOsPerfis + remotos).associateBy { it.id }.toMutableMap()
+                perfil.todosOsPerfis.clear()
+                perfil.todosOsPerfis.addAll(mapaUnificado.values)
+                perfil.atualizarListaPessoasCuidadas()
+            }
+
+            if (remotosCompletos.isNotEmpty()) {
                 for (item in remotosCompletos) {
                     val p = item.perfil
                     medicacao.atualizarListaEmMemoria(p.id, p.medicamentos)
@@ -182,8 +201,8 @@ class AppContainer(context: Context) {
                         dbLocal.notaDao().inserir(pt.ulsbe.pontesaude.data.local.entity.NotaEntity(0, p.id, n.texto, n.autor, false))
                     }
                 }
-                versaoSincronizacao++
             }
+            versaoSincronizacao++
         }
 
         // Sincronizar dados pendentes criados offline

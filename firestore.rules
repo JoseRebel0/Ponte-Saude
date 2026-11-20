@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Catálogo Institucional Público (Apenas Leitura para Qualquer Utente)
+    match /modulos_saude/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /videos_biblioteca/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /recompensas/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 2. Perfis e Dados Clínicos Privados (Apenas o Próprio Dono ou Cuidadores Autorizados)
+    match /perfis/{idPerfil} {
+      // Leitura permitida se o utilizador for o dono ou cuidador autorizado
+      allow read: if request.auth != null && (
+        resource.data.donoUid == request.auth.uid ||
+        request.auth.uid in resource.data.cuidadoresIds
+      );
+
+      // Criação permitida vinculando obrigatoriamente o seu próprio UID como dono
+      allow create: if request.auth != null && request.resource.data.donoUid == request.auth.uid;
+
+      // Atualização ou eliminação apenas pelo dono ou cuidador autorizado
+      allow update, delete: if request.auth != null && (
+        resource.data.donoUid == request.auth.uid ||
+        request.auth.uid in resource.data.cuidadoresIds
+      );
+
+      // Subcoleções Privadas (Medicamentos, Consultas, Notas)
+      match /{subcolecao}/{docSubId} {
+        allow read, write: if request.auth != null && (
+          get(/databases/$(database)/documents/perfis/$(idPerfil)).data.donoUid == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/perfis/$(idPerfil)).data.cuidadoresIds
+        );
+      }
+    }
+  }
+}

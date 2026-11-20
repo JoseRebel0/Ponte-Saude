@@ -54,11 +54,13 @@ class LoginCMDViewModel(
      * Atualiza a lista de perfis disponíveis carregados do Room ou Firestore.
      */
     fun recarregar() {
-        val perfis = perfilRepository.todosOsPerfis
+        perfilRepository.carregarPerfisLocais()
+        val perfis = perfilRepository.todosOsPerfis.toList()
         _uiState.update {
             it.copy(
                 perfisDisponiveis = perfis,
-                perfilSelecionadoId = it.perfilSelecionadoId.ifBlank { perfis.firstOrNull()?.id ?: "1" },
+                perfilSelecionadoId = it.perfilSelecionadoId.takeIf { id -> perfis.any { p -> p.id == id } }
+                    ?: perfis.firstOrNull()?.id ?: "1",
             )
         }
     }
@@ -99,6 +101,30 @@ class LoginCMDViewModel(
     }
 
     /**
+     * Remove um perfil específico e limpa o registo do Room, Firestore e Firebase Authentication.
+     */
+    fun apagarPerfil(idPerfil: String) {
+        _uiState.update { it.copy(mensagemSucesso = null, mensagemErro = null) }
+        viewModelScope.launch {
+            try {
+                perfilRepository.apagarPerfil(idPerfil)
+                recarregar()
+                val restante = _uiState.value.perfisDisponiveis.firstOrNull()
+                _uiState.update {
+                    it.copy(
+                        perfilSelecionadoId = restante?.id ?: "1",
+                        mensagemSucesso = "Perfil apagado com sucesso.",
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(mensagemErro = "Erro ao apagar perfil: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    /**
      * Remove todos os perfis gerados aleatoriamente, preservando os perfis essenciais da demonstração.
      */
     fun limparPerfisDemonstracao() {
@@ -127,9 +153,9 @@ class LoginCMDViewModel(
     /**
      * Conclui o processo de autenticação CMD e inicia a sessão para o perfil selecionado.
      */
-    fun concluirAutenticacao(aoSucesso: (String) -> Unit) {
+    fun concluirAutenticacao(aoSucesso: (String) -> Unit, identificador: String = "") {
         val id = _uiState.value.perfilSelecionadoId
-        perfilRepository.iniciarSessaoCMD(id)
+        perfilRepository.iniciarSessaoCMD(id, identificador)
         aoSucesso(id)
     }
 }
