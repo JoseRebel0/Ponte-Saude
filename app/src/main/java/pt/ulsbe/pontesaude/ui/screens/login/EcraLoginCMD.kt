@@ -69,6 +69,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -120,10 +121,12 @@ private enum class ModoIdentificacao {
  */
 @Composable
 fun EcraLoginCMD(
+    viewModel: LoginCMDViewModel? = null,
     perfilRepository: PerfilRepository? = null,
     sincronizador: AppContainer? = null,
     aoAutenticar: (String) -> Unit,
 ) {
+    val uiState = viewModel?.uiState?.collectAsState()?.value
     val teclado = LocalSoftwareKeyboardController.current
     val escopo = rememberCoroutineScope()
 
@@ -171,7 +174,12 @@ fun EcraLoginCMD(
             textoProgresso = "A carregar ficha de utente do SNS..."
             delay(400)
             emProgresso = false
-            aoAutenticar(idPerfil)
+            if (viewModel != null) {
+                viewModel.selecionarPerfil(idPerfil)
+                viewModel.concluirAutenticacao(aoAutenticar)
+            } else {
+                aoAutenticar(idPerfil)
+            }
         }
     }
 
@@ -799,7 +807,7 @@ fun EcraLoginCMD(
                             )
 
                             // Seletor de Perfis de Teste
-                            val perfisDemonstracao = perfilRepository?.todosOsPerfis.orEmpty()
+                            val perfisDemonstracao = uiState?.perfisDisponiveis.takeUnless { it.isNullOrEmpty() } ?: perfilRepository?.todosOsPerfis.orEmpty()
 
                             if (perfisDemonstracao.isEmpty()) {
                                 Surface(
@@ -910,7 +918,7 @@ fun EcraLoginCMD(
                                     mensagemSucesso = null
                                     escopo.launch {
                                         try {
-                                            val criado = perfilRepository?.criarPerfilAleatorio()
+                                            val criado = if (viewModel != null) { viewModel.criarPerfilAleatorio(); null } else perfilRepository?.criarPerfilAleatorio()
                                             if (criado != null) {
                                                 perfilEscolhidoId = criado.id
                                                 telemovel = criado.telemovel.replace("+351 ", "")
@@ -955,7 +963,7 @@ fun EcraLoginCMD(
                                         mensagemSucesso = null
                                         escopo.launch {
                                             try {
-                                                val apagados = perfilRepository?.apagarPerfisAleatorios() ?: 0
+                                                val apagados = if (viewModel != null) { viewModel.limparPerfisDemonstracao(); 0 } else perfilRepository?.apagarPerfisAleatorios() ?: 0
                                                 val rest = perfisDemonstracao.firstOrNull()
                                                 perfilEscolhidoId = rest?.id ?: "1"
                                                 if (rest != null) {

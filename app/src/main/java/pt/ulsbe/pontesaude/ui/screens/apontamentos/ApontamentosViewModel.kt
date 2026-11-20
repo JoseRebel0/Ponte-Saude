@@ -70,16 +70,16 @@ class ApontamentosViewModel(
     }
 
     /**
-     * Adiciona uma nova nota clínica ou dúvida para a próxima consulta.
+     * Adiciona uma nova nota clínica ou dúvida registada pelo utente para a próxima consulta.
      *
      * @param texto Conteúdo textual da nota registada.
-     * @param autor Nome ou papel de quem registou a nota (ex: "Utente", "Filha", "Cuidador").
+     * @param autor Identificação de quem efetuou o registo (sempre atribuído ao utente).
      */
-    fun adicionarNota(texto: String, autor: String) {
+    fun adicionarNota(texto: String, autor: String = "Utente") {
         val limpo = texto.trim()
         if (limpo.isBlank()) return
         val perfil = perfilRepository.perfilAtivo
-        notaRepository.adicionarNota(perfil, Nota(limpo, autor.ifBlank { "Utente" }))
+        notaRepository.adicionarNota(perfil, Nota(limpo, "Utente"))
         recarregar()
     }
 

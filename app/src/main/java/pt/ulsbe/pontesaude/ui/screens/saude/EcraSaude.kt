@@ -62,6 +62,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -145,6 +146,7 @@ fun pesquisarGlossario(consulta: String): String {
 fun EcraSaude(
     perfil: Perfil,
     idModuloAberto: String?,
+    viewModel: SaudeViewModel? = null,
     concluidos: List<String>,
     saudeRepository: SaudeRepository? = null,
     perfilRepository: PerfilRepository? = null,
@@ -154,7 +156,12 @@ fun EcraSaude(
     aoAlternarModulo: (String) -> Unit,
     aoNavegar: (SeparadorApp) -> Unit,
 ) {
-    val modulo = saudeRepository?.modulosSaude?.find { it.id == idModuloAberto }
+    val uiState = viewModel?.uiState?.collectAsState()?.value
+    LaunchedEffect(perfil.id) {
+        viewModel?.recarregar()
+    }
+    val modulosFonte = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
+    val modulo = modulosFonte.find { it.id == idModuloAberto }
     if (modulo != null) {
         EcraModulo(
             modulo = modulo,
@@ -257,9 +264,9 @@ fun EcraSaude(
 
             // PROGRAMA DE LITERACIA & SEGURANÇA (HUD POLIDO E EQUILIBRADO)
             item {
-                val pontos = saudeRepository?.pontosSeguranca ?: 50
+                val pontos = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
                 val infoNivel = calcularNivelSeguranca(pontos)
-                val vouchers = saudeRepository?.vouchersResgatados.orEmpty()
+                val vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty()
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -465,7 +472,7 @@ fun EcraSaude(
                     Text("Toque para abrir, ouvir e acumular pontos de segurança", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            val listaModulos = saudeRepository?.modulosSaude ?: emptyList()
+            val listaModulos = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
             items(listaModulos, key = { it.id }) { item ->
                 val concluido = item.id in concluidos
                 Card(
@@ -553,16 +560,16 @@ fun EcraSaude(
                     Text("Vídeos educativos do SNS no YouTube · Assista e ganhe +30 pontos de literacia", color = Atenuado, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            val listaVideos = saudeRepository?.videosBiblioteca ?: emptyList()
+            val listaVideos = uiState?.videos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.videosBiblioteca ?: emptyList()
             items(listaVideos, key = { it.id }) { video ->
-                val jaVisto = saudeRepository?.videosAssistidos?.contains(video.id) == true
+                val jaVisto = (uiState?.videosAssistidos?.contains(video.id) == true) || (saudeRepository?.videosAssistidos?.contains(video.id) == true)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
                         .clickable {
                             plataforma.abrirLigacao(video.urlYoutube)
-                            val pts = saudeRepository?.premiarVerVideo(video.id) ?: 0
+                            if (viewModel != null) viewModel.verVideo(video.id) else saudeRepository?.premiarVerVideo(video.id); val pts = 25
                             if (pts > 0) {
                                 mensagemNotificacao = "⭐ Parabéns! Ganhou +$pts Pontos por assistir ao vídeo oficial «${video.titulo}»!"
                             }
@@ -667,11 +674,11 @@ fun EcraSaude(
 
     if (mostrarDialogoResgate) {
         DialogoResgateRecompensas(
-            pontosAtuais = saudeRepository?.pontosSeguranca ?: 50,
-            recompensas = saudeRepository?.catalogoRecompensas ?: emptyList(),
+            pontosAtuais = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50,
+            recompensas = uiState?.recompensas.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.catalogoRecompensas ?: emptyList(),
             aoResgatar = { recompensa ->
                 mostrarDialogoResgate = false
-                val voucher = saudeRepository?.resgatarRecompensa(recompensa)
+                if (viewModel != null) viewModel.resgatarVoucher(recompensa); val voucher = saudeRepository?.resgatarRecompensa(recompensa)
                 if (voucher != null) {
                     voucherRecemResgatado = voucher
                 }
@@ -682,7 +689,7 @@ fun EcraSaude(
 
     if (mostrarDialogoVouchers) {
         DialogoMeusVouchers(
-            vouchers = saudeRepository?.vouchersResgatados.orEmpty(),
+            vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty(),
             aoFechar = { mostrarDialogoVouchers = false },
         )
     }

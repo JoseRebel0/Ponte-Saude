@@ -29,6 +29,13 @@ import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.ui.components.iconeSeparador
 import pt.ulsbe.pontesaude.ui.screens.EcraSemInternetPrimeiraVez
+import pt.ulsbe.pontesaude.ui.screens.inicio.InicioViewModel
+import pt.ulsbe.pontesaude.ui.screens.consultas.ConsultasViewModel
+import pt.ulsbe.pontesaude.ui.screens.medicacao.MedicacaoViewModel
+import pt.ulsbe.pontesaude.ui.screens.apontamentos.ApontamentosViewModel
+import pt.ulsbe.pontesaude.ui.screens.saude.SaudeViewModel
+import pt.ulsbe.pontesaude.ui.screens.definicoes.DefinicoesViewModel
+import pt.ulsbe.pontesaude.ui.screens.login.LoginCMDViewModel
 import pt.ulsbe.pontesaude.ui.screens.apontamentos.EcraApontamentos
 import pt.ulsbe.pontesaude.ui.screens.consultas.EcraConsultas
 import pt.ulsbe.pontesaude.ui.screens.definicoes.EcraDefinicoes
@@ -53,6 +60,54 @@ private val separadoresInferiores = listOf(
  */
 @Composable
 fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
+    val loginViewModel = remember(container) {
+        LoginCMDViewModel(
+            perfilRepository = container.perfil,
+        )
+    }
+    val inicioViewModel = remember(container) {
+        InicioViewModel(
+            perfilRepository = container.perfil,
+            consultaRepository = container.consultas,
+            medicacaoRepository = container.medicacao,
+            configuracaoRepository = container.configuracao,
+        )
+    }
+    val saudeViewModel = remember(container) {
+        SaudeViewModel(
+            saudeRepository = container.saude,
+            perfilRepository = container.perfil,
+        )
+    }
+    val consultasViewModel = remember(container) {
+        ConsultasViewModel(
+            consultaRepository = container.consultas,
+            perfilRepository = container.perfil,
+            configuracaoRepository = container.configuracao,
+        )
+    }
+    val medicacaoViewModel = remember(container) {
+        MedicacaoViewModel(
+            medicacaoRepository = container.medicacao,
+            perfilRepository = container.perfil,
+            notaRepository = container.notas,
+            configuracaoRepository = container.configuracao,
+        )
+    }
+    val apontamentosViewModel = remember(container) {
+        ApontamentosViewModel(
+            notaRepository = container.notas,
+            perfilRepository = container.perfil,
+            saudeRepository = container.saude,
+        )
+    }
+    val definicoesViewModel = remember(container) {
+        DefinicoesViewModel(
+            configuracaoRepository = container.configuracao,
+            perfilRepository = container.perfil,
+            medicacaoRepository = container.medicacao,
+        )
+    }
     TemaPonteSaude(textoGrande = container.configuracao.textoGrande) {
         LaunchedEffect(Unit) {
             container.sincronizarAutomatico(plataforma.temConexaoInternet())
@@ -67,6 +122,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
             )
         } else if (!container.perfil.autenticado) {
             EcraLoginCMD(
+                viewModel = loginViewModel,
                 perfilRepository = container.perfil,
                 sincronizador = container,
                 aoAutenticar = { idPerfil ->
@@ -77,6 +133,26 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
             var separador by remember { mutableStateOf(SeparadorApp.INICIO) }
             var moduloAberto by remember { mutableStateOf<String?>(null) }
             val perfil = container.perfilAtivoCompleto
+
+            LaunchedEffect(perfil.id, container.versaoSincronizacao, container.perfil.modoCuidador, container.perfil.indicePerfilCuidado) {
+                inicioViewModel.atualizarEstado()
+                medicacaoViewModel.recarregar()
+                consultasViewModel.recarregar()
+                apontamentosViewModel.recarregar()
+                saudeViewModel.recarregar()
+                definicoesViewModel.recarregar()
+            }
+
+            LaunchedEffect(container.estaASincronizarFirestore) {
+                if (!container.estaASincronizarFirestore) {
+                    inicioViewModel.atualizarEstado()
+                    medicacaoViewModel.recarregar()
+                    consultasViewModel.recarregar()
+                    apontamentosViewModel.recarregar()
+                    saudeViewModel.recarregar()
+                    definicoesViewModel.recarregar()
+                }
+            }
 
             val navegarPara: (SeparadorApp) -> Unit = {
                 moduloAberto = null
@@ -118,6 +194,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                         when (separadorAtual) {
                             SeparadorApp.INICIO -> EcraInicio(
                                 perfil = perfil,
+                                viewModel = inicioViewModel,
                                 perfilRepository = container.perfil,
                                 configuracaoRepository = container.configuracao,
                                 aoSincronizar = { container.sincronizarComFirestore() },
@@ -127,6 +204,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             SeparadorApp.SAUDE -> EcraSaude(
                                 perfil = perfil,
                                 idModuloAberto = idModulo,
+                                viewModel = saudeViewModel,
                                 concluidos = container.saude.modulosConcluidos,
                                 saudeRepository = container.saude,
                                 perfilRepository = container.perfil,
@@ -138,6 +216,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             )
                             SeparadorApp.CONSULTAS -> EcraConsultas(
                                 perfil = perfil,
+                                viewModel = consultasViewModel,
                                 consultaRepository = container.consultas,
                                 perfilRepository = container.perfil,
                                 configuracaoRepository = container.configuracao,
@@ -146,6 +225,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             )
                             SeparadorApp.MEDICACAO -> EcraMedicacao(
                                 perfil = perfil,
+                                viewModel = medicacaoViewModel,
                                 medicacaoRepository = container.medicacao,
                                 configuracaoRepository = container.configuracao,
                                 notaRepository = container.notas,
@@ -155,6 +235,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             )
                             SeparadorApp.NOTAS -> EcraApontamentos(
                                 perfil = perfil,
+                                viewModel = apontamentosViewModel,
                                 notaRepository = container.notas,
                                 saudeRepository = container.saude,
                                 perfilRepository = container.perfil,
@@ -163,6 +244,7 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             )
                             SeparadorApp.DEFINICOES -> EcraDefinicoes(
                                 perfil = perfil,
+                                viewModel = definicoesViewModel,
                                 configuracaoRepository = container.configuracao,
                                 perfilRepository = container.perfil,
                                 medicacaoRepository = container.medicacao,

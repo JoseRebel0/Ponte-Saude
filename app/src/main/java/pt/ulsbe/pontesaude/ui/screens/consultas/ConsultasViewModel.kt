@@ -1,10 +1,14 @@
 package pt.ulsbe.pontesaude.ui.screens.consultas
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Consulta
@@ -17,6 +21,8 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
  * @property perfil Perfil do utente com as suas informações clínicas associadas.
  * @property consultas Lista ordenada de consultas médicas e exames de diagnóstico agendados.
  * @property consultaSelecionada Consulta atualmente em foco para exibição detalhada da checklist.
+ * @property agendaEAlarmesAtivos Indica se a sincronização com o calendário nativo do Android está ativa.
+ * @property modoCuidador Indica se o ecrã está a ser visualizado no papel de cuidador.
  * @property emCarregamento Indica se está a decorrer sincronização ou operação na base de dados.
  * @property mensagemErro Mensagem descritiva em caso de falha de agendamento ou cancelamento.
  * @property mensagemSucesso Mensagem de confirmação de ações concluídas com sucesso.
@@ -25,6 +31,8 @@ data class ConsultasUiState(
     val perfil: Perfil? = null,
     val consultas: List<Consulta> = emptyList(),
     val consultaSelecionada: Consulta? = null,
+    val agendaEAlarmesAtivos: Boolean = true,
+    val modoCuidador: Boolean = false,
     val emCarregamento: Boolean = false,
     val mensagemErro: String? = null,
     val mensagemSucesso: String? = null,
@@ -39,6 +47,7 @@ data class ConsultasUiState(
 class ConsultasViewModel(
     private val consultaRepository: ConsultaRepository,
     private val perfilRepository: PerfilRepository,
+    private val configuracaoRepository: ConfiguracaoRepository? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConsultasUiState())
@@ -54,12 +63,29 @@ class ConsultasViewModel(
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
         val consultas = consultaRepository.consultas(perfil)
+        val modoCuidador = perfilRepository.modoCuidador
+        val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
         _uiState.update {
             it.copy(
                 perfil = perfil,
                 consultas = consultas,
                 consultaSelecionada = it.consultaSelecionada ?: consultas.firstOrNull(),
+                agendaEAlarmesAtivos = agendaAtiva,
+                modoCuidador = modoCuidador,
             )
+        }
+    }
+
+    /**
+     * Dispara o pull-to-refresh e sincroniza consultas com a cloud.
+     */
+    fun dispararAtualizacao(aoSincronizar: (suspend () -> Unit)? = null) {
+        _uiState.update { it.copy(emCarregamento = true) }
+        viewModelScope.launch {
+            aoSincronizar?.invoke()
+            delay(500)
+            recarregar()
+            _uiState.update { it.copy(emCarregamento = false) }
         }
     }
 
@@ -95,7 +121,12 @@ class ConsultasViewModel(
     fun sincronizarComCalendario(plataforma: ServicosDispositivo) {
         val perfil = perfilRepository.perfilAtivo
         val consultas = consultaRepository.consultas(perfil)
-        plataforma.sincronizarConsultasNoCalendario(consultas)
-        _uiState.update { it.copy(mensagemSucesso = "Consultas sincronizadas com a sua agenda!") }
+        val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
+        if (agendaAtiva) {
+            plataforma.sincronizarConsultasNoCalendario(consultas)
+            _uiState.update { it.copy(mensagemSucesso = "Consultas sincronizadas com a sua agenda!") }
+        } else {
+            plataforma.removerConsultasDoCalendario()
+        }
     }
 }

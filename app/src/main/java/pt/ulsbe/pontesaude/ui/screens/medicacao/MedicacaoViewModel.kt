@@ -2,12 +2,15 @@ package pt.ulsbe.pontesaude.ui.screens.medicacao
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.MedicacaoRepository
+import pt.ulsbe.pontesaude.data.repository.NotaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
@@ -17,18 +20,26 @@ import pt.ulsbe.pontesaude.model.Perfil
  *
  * @property perfil Perfil do utente com a respetiva lista de terapêuticas ativas.
  * @property medicamentos Lista completa de medicamentos prescritos e registados.
+ * @property produtos Lista de outros produtos de saúde (suplementos, vitaminas, ervanária).
+ * @property agendaEAlarmesAtivos Indica se os alarmes automáticos de toma estão ativados.
+ * @property modoCuidador Indica se o ecrã está em visualização de familiar/dependente.
  * @property medicamentoSelecionado Fármaco atualmente em destaque para visualização ou edição.
  * @property aCarregarIa Indica se está a decorrer um pedido de simplificação de bula/termos à IA (Gemini).
  * @property explicacaoIa Resposta simplificada da IA explicada em linguagem sénior acessível.
+ * @property emCarregamento Indica se está a decorrer pull-to-refresh ou sincronização.
  * @property mensagemErro Mensagem de erro em caso de falha de rede ou validação.
  * @property mensagemSucesso Mensagem de confirmação de registo ou atualização bem-sucedida.
  */
 data class MedicacaoUiState(
     val perfil: Perfil? = null,
     val medicamentos: List<Medicamento> = emptyList(),
+    val produtos: List<String> = emptyList(),
+    val agendaEAlarmesAtivos: Boolean = true,
+    val modoCuidador: Boolean = false,
     val medicamentoSelecionado: Medicamento? = null,
     val aCarregarIa: Boolean = false,
     val explicacaoIa: String? = null,
+    val emCarregamento: Boolean = false,
     val mensagemErro: String? = null,
     val mensagemSucesso: String? = null,
 )
@@ -36,12 +47,14 @@ data class MedicacaoUiState(
 /**
  * ViewModel responsável pela gestão do plano terapêutico e medicação diária.
  *
- * Suporta adição, edição, ativação/desativação de tomas, registo de fotografias das caixas
- * e esclarecimento de dúvidas sobre a posologia através de Inteligência Artificial generativa.
+ * Suporta adição, edição, ativação/desativação de tomas, registo de fotografias das caixas,
+ * suplementos/ervanária e esclarecimento de dúvidas sobre a posologia através de IA (Gemini).
  */
 class MedicacaoViewModel(
     private val medicacaoRepository: MedicacaoRepository,
     private val perfilRepository: PerfilRepository,
+    private val notaRepository: NotaRepository? = null,
+    private val configuracaoRepository: ConfiguracaoRepository? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MedicacaoUiState())
@@ -57,11 +70,30 @@ class MedicacaoViewModel(
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
         val meds = medicacaoRepository.medicamentos(perfil)
+        val prods = notaRepository?.produtos(perfil) ?: perfil.outrosProdutos
+        val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
+        val modoCuidador = perfilRepository.modoCuidador
         _uiState.update {
             it.copy(
                 perfil = perfil,
                 medicamentos = meds,
+                produtos = prods,
+                agendaEAlarmesAtivos = agendaAtiva,
+                modoCuidador = modoCuidador,
             )
+        }
+    }
+
+    /**
+     * Dispara atualização assíncrona com pull-to-refresh.
+     */
+    fun dispararAtualizacao(aoSincronizar: (suspend () -> Unit)? = null) {
+        _uiState.update { it.copy(emCarregamento = true) }
+        viewModelScope.launch {
+            aoSincronizar?.invoke()
+            delay(500)
+            recarregar()
+            _uiState.update { it.copy(emCarregamento = false) }
         }
     }
 
@@ -107,6 +139,34 @@ class MedicacaoViewModel(
     fun atualizarFoto(id: Long, fotoBase64: String?) {
         val perfil = perfilRepository.perfilAtivo
         medicacaoRepository.atualizarFotoMedicamento(perfil, id, fotoBase64)
+        recarregar()
+    }
+
+    /**
+     * Adiciona um produto de ervanária, suplemento ou vitamina à lista.
+     */
+    fun adicionarProduto(produto: String) {
+        val limpo = produto.trim()
+        if (limpo.isBlank()) return
+        val perfil = perfilRepository.perfilAtivo
+        notaRepository?.adicionarProduto(perfil, limpo)
+        recarregar()
+    }
+
+    /**
+     * Remove um produto de ervanária ou suplemento da lista.
+     */
+    fun apagarProduto(produto: String) {
+        val perfil = perfilRepository.perfilAtivo
+        notaRepository?.apagarProduto(perfil, produto)
+        recarregar()
+    }
+
+    /**
+     * Alterna o estado de alarmes do despertador nas preferências de configuração.
+     */
+    fun atualizarAgendaEAlarmes(ativo: Boolean) {
+        configuracaoRepository?.atualizarAgendaEAlarmesAtivos(ativo)
         recarregar()
     }
 

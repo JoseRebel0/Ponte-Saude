@@ -45,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,47 +90,68 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 @Composable
 fun EcraConsultas(
     perfil: Perfil,
+    viewModel: ConsultasViewModel? = null,
     consultaRepository: ConsultaRepository? = null,
     perfilRepository: PerfilRepository? = null,
     configuracaoRepository: ConfiguracaoRepository? = null,
     aoSincronizar: (suspend () -> Unit)? = null,
     plataforma: ServicosDispositivo,
 ) {
-    val consultas = consultaRepository?.consultas(perfil) ?: perfil.consultas
+    val uiState = viewModel?.uiState?.collectAsState()?.value
+    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil ?: perfil else perfil
+    val consultas = if (uiState != null && uiState.perfil?.id == perfil.id) {
+        uiState.consultas
+    } else {
+        consultaRepository?.consultas(perfil) ?: perfil.consultas
+    }
+    LaunchedEffect(perfil.id) {
+        viewModel?.recarregar()
+    }
+    val modoCuidador = uiState?.modoCuidador ?: (perfilRepository?.modoCuidador == true)
+    val agendaAtiva = uiState?.agendaEAlarmesAtivos ?: configuracaoRepository?.agendaEAlarmesAtivos ?: true
+
     val estadoLista = rememberLazyListState()
-    var aAtualizar by remember { mutableStateOf(false) }
+    var aAtualizarLocal by remember { mutableStateOf(false) }
+    val aAtualizar = uiState?.emCarregamento ?: aAtualizarLocal
     val escopo = rememberCoroutineScope()
 
-    var idSelecionado by remember(perfil.id, consultas.size) {
-        mutableStateOf(consultas.firstOrNull()?.id ?: 0)
+    var idSelecionado by remember(perfilAtivo.id, consultas.size) {
+        mutableStateOf(uiState?.consultaSelecionada?.id ?: consultas.firstOrNull()?.id ?: 0)
     }
     var mostrarDialogoNovaConsulta by remember { mutableStateOf(false) }
-    val verificacoes = remember(perfil.id) { mutableStateMapOf<String, Boolean>() }
+    val verificacoes = remember(perfilAtivo.id) { mutableStateMapOf<String, Boolean>() }
     var mensagem by remember(idSelecionado) { mutableStateOf("") }
     val selecionada = consultas.firstOrNull { it.id == idSelecionado } ?: consultas.firstOrNull()
 
     // Sincronização automática com o calendário nativo do telemóvel por defeito
-    val agendaAtiva = configuracaoRepository?.agendaEAlarmesAtivos ?: true
     LaunchedEffect(consultas, agendaAtiva) {
-        if (agendaAtiva) {
-            plataforma.sincronizarConsultasNoCalendario(consultas)
+        if (viewModel != null) {
+            viewModel.sincronizarComCalendario(plataforma)
         } else {
-            plataforma.removerConsultasDoCalendario()
+            if (agendaAtiva) {
+                plataforma.sincronizarConsultasNoCalendario(consultas)
+            } else {
+                plataforma.removerConsultasDoCalendario()
+            }
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Consultas · ${perfil.nome}" else "Consultas"
-        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Agenda e exames"
-        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
+        val tituloEcra = if (modoCuidador) "Consultas · ${perfilAtivo.nome}" else "Consultas"
+        val subtituloEcra = if (modoCuidador) "Conta de ${perfilAtivo.nome} (Modo Cuidador)" else "Agenda e exames"
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfilAtivo.iniciais)
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
-                aAtualizar = true
-                escopo.launch {
-                    aoSincronizar?.invoke()
-                    delay(500)
-                    aAtualizar = false
+                if (viewModel != null) {
+                    viewModel.dispararAtualizacao(aoSincronizar)
+                } else {
+                    aAtualizarLocal = true
+                    escopo.launch {
+                        aoSincronizar?.invoke()
+                        delay(500)
+                        aAtualizarLocal = false
+                    }
                 }
             },
             modifier = Modifier.weight(1f),
@@ -463,7 +485,11 @@ fun EcraConsultas(
                             tipo = novoTipo.trim().ifBlank { "Consulta Externa" },
                             jejum = precisaJejum,
                         )
-                        consultaRepository?.adicionarConsulta(perfil, nova)
+                        if (viewModel != null) {
+                            viewModel.agendarConsulta(nova)
+                        } else {
+                            consultaRepository?.adicionarConsulta(perfilAtivo, nova)
+                        }
                         idSelecionado = novoId
                         mostrarDialogoNovaConsulta = false
                     },
