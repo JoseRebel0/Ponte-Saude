@@ -615,6 +615,10 @@ class ServicosDispositivo(context: Context?) {
     }
 
     fun falar(texto: String) {
+        val prefs = contextoApp?.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
+        val somVozAtivo = prefs?.getBoolean("som_voz_ativo", false) ?: false
+        if (!somVozAtivo) return
+
         if (pronto && sintetizadorVoz != null) {
             sintetizadorVoz?.stop()
             sintetizadorVoz?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "ponte-saude")

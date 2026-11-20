@@ -111,6 +111,35 @@ class AppContainer(context: Context) {
     }
 
     suspend fun sincronizarComFirestore() {
+        // Sincronizar catálogo de módulos de saúde, vídeos e recompensas
+        runCatching {
+            val modulosRemotos = clienteFirestore.obterModulosSaude()
+            val videosRemotos = clienteFirestore.obterVideosBiblioteca()
+            val recompsRemotas = clienteFirestore.obterCatalogoRecompensas()
+
+            if (modulosRemotos.isNotEmpty()) {
+                dbLocal.moduloDao().inserirVarios(modulosRemotos.map { it.paraEntidade() })
+                withContext(Dispatchers.Main) {
+                    saude.modulosSaude.clear()
+                    saude.modulosSaude.addAll(modulosRemotos)
+                }
+            }
+            if (videosRemotos.isNotEmpty()) {
+                dbLocal.videoDao().inserirVarios(videosRemotos.map { it.paraEntidade() })
+                withContext(Dispatchers.Main) {
+                    saude.videosBiblioteca.clear()
+                    saude.videosBiblioteca.addAll(videosRemotos)
+                }
+            }
+            if (recompsRemotas.isNotEmpty()) {
+                dbLocal.recompensaDao().inserirVarias(recompsRemotas.map { it.paraEntidade() })
+                withContext(Dispatchers.Main) {
+                    saude.catalogoRecompensas.clear()
+                    saude.catalogoRecompensas.addAll(recompsRemotas)
+                }
+            }
+        }
+
         val remotosCompletos = clienteFirestore.carregarTodosOsPerfis().getOrNull().orEmpty()
         if (remotosCompletos.isNotEmpty()) {
             val remotos = remotosCompletos.map { it.perfil }
@@ -144,8 +173,14 @@ class AppContainer(context: Context) {
                             false,
                         ),
                     )
+                    dbLocal.medicamentoDao().apagarPorPerfil(p.id)
                     dbLocal.medicamentoDao().inserirVarios(p.medicamentos.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
+                    dbLocal.consultaDao().apagarPorPerfil(p.id)
                     dbLocal.consultaDao().inserirVarios(p.consultas.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
+                    dbLocal.notaDao().apagarPorPerfil(p.id)
+                    for (n in p.notas) {
+                        dbLocal.notaDao().inserir(pt.ulsbe.pontesaude.data.local.entity.NotaEntity(0, p.id, n.texto, n.autor, false))
+                    }
                 }
                 versaoSincronizacao++
             }

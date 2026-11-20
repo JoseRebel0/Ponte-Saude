@@ -113,25 +113,6 @@ class ApontamentosViewModel(
         recarregar()
     }
 
-    /**
-     * Adiciona um produto de parafarmácia, penso ou suplemento à lista do utente.
-     */
-    fun adicionarProduto(produto: String) {
-        val limpo = produto.trim()
-        if (limpo.isBlank()) return
-        val perfil = perfilRepository.perfilAtivo
-        notaRepository.adicionarProduto(perfil, limpo)
-        recarregar()
-    }
-
-    /**
-     * Remove um produto da lista do utente.
-     */
-    fun apagarProduto(produto: String) {
-        val perfil = perfilRepository.perfilAtivo
-        notaRepository.apagarProduto(perfil, produto)
-        recarregar()
-    }
 
     /**
      * Traduz e simplifica um termo médico ou diagnóstico através da IA (Gemini).

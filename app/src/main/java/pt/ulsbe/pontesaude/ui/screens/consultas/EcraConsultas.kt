@@ -21,14 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.EventBusy
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.NotificationsActive
-import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SupervisorAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,7 +42,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,14 +50,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
@@ -72,7 +63,6 @@ import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
-import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.components.ChecklistInterativa
@@ -80,7 +70,6 @@ import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.Marca
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
-import pt.ulsbe.pontesaude.ui.theme.Superficie2
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
 /**
@@ -104,9 +93,6 @@ fun EcraConsultas(
     } else {
         consultaRepository?.consultas(perfil) ?: perfil.consultas
     }
-    LaunchedEffect(perfil.id) {
-        viewModel?.recarregar()
-    }
     val modoCuidador = uiState?.modoCuidador ?: (perfilRepository?.modoCuidador == true)
     val agendaAtiva = uiState?.agendaEAlarmesAtivos ?: configuracaoRepository?.agendaEAlarmesAtivos ?: true
 
@@ -118,9 +104,14 @@ fun EcraConsultas(
     var idSelecionado by remember(perfilAtivo.id, consultas.size) {
         mutableStateOf(uiState?.consultaSelecionada?.id ?: consultas.firstOrNull()?.id ?: 0)
     }
+
+    LaunchedEffect(perfil.id) {
+        viewModel?.recarregar()
+    }
+    LaunchedEffect(perfilAtivo.id) {
+        idSelecionado = uiState?.consultaSelecionada?.id ?: consultas.firstOrNull()?.id ?: 0
+    }
     var mostrarDialogoNovaConsulta by remember { mutableStateOf(false) }
-    val verificacoes = remember(perfilAtivo.id) { mutableStateMapOf<String, Boolean>() }
-    var mensagem by remember(idSelecionado) { mutableStateOf("") }
     val selecionada = consultas.firstOrNull { it.id == idSelecionado } ?: consultas.firstOrNull()
 
     // Sincronização automática com o calendário nativo do telemóvel por defeito
@@ -136,10 +127,12 @@ fun EcraConsultas(
         }
     }
 
+    val tituloEcra = if (modoCuidador) "Consultas · ${perfilAtivo.nome}" else "Consultas"
+    val subtituloEcra = if (modoCuidador) "Conta de ${perfilAtivo.nome} (Modo Cuidador)" else "Agenda e exames"
+
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (modoCuidador) "Consultas · ${perfilAtivo.nome}" else "Consultas"
-        val subtituloEcra = if (modoCuidador) "Conta de ${perfilAtivo.nome} (Modo Cuidador)" else "Agenda e exames"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfilAtivo.iniciais)
+
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
@@ -154,18 +147,20 @@ fun EcraConsultas(
                     }
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
+                modifier = Modifier.fillMaxSize(),
                 state = estadoLista,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-                if (perfilRepository?.modoCuidador == true) {
-                    item {
+            if (perfilRepository?.modoCuidador == true) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
@@ -198,9 +193,11 @@ fun EcraConsultas(
                         }
                     }
                 }
+            }
 
-                // BOTÃO PARA AGENDAR NOVA CONSULTA / EXAME
-                item {
+            // BOTÃO PARA AGENDAR NOVA CONSULTA / EXAME
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     Button(
                         onClick = { mostrarDialogoNovaConsulta = true },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -212,16 +209,20 @@ fun EcraConsultas(
                         Text("Adicionar Nova Consulta / Exame", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
 
-                if (consultas.isEmpty()) {
-                    item {
+            if (consultas.isEmpty()) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         CartaoApp {
                             Text("Não tem consultas ou exames agendados.", color = Atenuado)
                         }
                     }
-                } else {
-                    items(consultas, key = { it.id }) { consulta ->
-                        val ativo = consulta.id == idSelecionado
+                }
+            } else {
+                items(consultas, key = { it.id }) { consulta ->
+                    val ativo = consulta.id == idSelecionado
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -248,26 +249,31 @@ fun EcraConsultas(
                         }
                     }
                 }
+            }
 
-                if (selecionada != null) {
-                    val consultaAtiva = selecionada
-                    item {
-                        val itensChecklist = remember(consultaAtiva.id) {
-                            gerarChecklistParaConsulta(consultaAtiva)
-                        }
+            if (selecionada != null) {
+                val consultaAtiva = selecionada
+                item {
+                    val itensChecklist = remember(consultaAtiva.id) {
+                        gerarChecklistParaConsulta(consultaAtiva)
+                    }
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         ChecklistInterativa(
                             titulo = "Checklist · ${consultaAtiva.titulo}",
                             subtitulo = "Preparação específica para ${consultaAtiva.tipo}",
                             itensPredefinidos = itensChecklist,
                             chavePersistencia = "consulta_${consultaAtiva.id}",
+                            idPerfil = perfilAtivo.id,
                             consultaRepository = consultaRepository,
                             plataforma = plataforma,
                             permiteAdicionar = false,
                         )
                     }
+                }
 
-                    if (agendaAtiva) {
-                        item {
+                if (agendaAtiva) {
+                    item {
+                        Box(Modifier.padding(horizontal = 20.dp)) {
                             CartaoApp {
                                 Row(
                                     modifier = Modifier
@@ -307,8 +313,10 @@ fun EcraConsultas(
                             }
                         }
                     }
+                }
 
-                    item {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         CartaoApp {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Column {
@@ -398,6 +406,7 @@ fun EcraConsultas(
                 }
             }
         }
+    }
     }
 
     if (mostrarDialogoNovaConsulta) {

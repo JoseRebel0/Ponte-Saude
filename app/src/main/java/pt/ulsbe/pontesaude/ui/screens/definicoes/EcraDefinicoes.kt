@@ -34,11 +34,9 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.VpnKey
-import androidx.compose.material.icons.rounded.Wc
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,12 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.MedicacaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
@@ -107,16 +102,17 @@ fun EcraDefinicoes(
 
     val estadoLista = rememberLazyListState()
 
-    Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra("Definições", "Acessibilidade e preferências", perfil.iniciais)
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            state = estadoLista,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = estadoLista,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            CabecalhoEcra("Definições", "Acessibilidade e preferências", perfil.iniciais)
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
                 CartaoApp {
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         LinhaDefinicao(
@@ -313,7 +309,9 @@ fun EcraDefinicoes(
                     }
                 }
             }
-            item {
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
                 CartaoApp {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Row(
@@ -390,7 +388,9 @@ fun EcraDefinicoes(
                     }
                 }
             }
-            item {
+        }
+        item {
+            Box(Modifier.padding(horizontal = 20.dp)) {
                 CartaoApp {
                     Column {
                         Text("Dados guardados neste dispositivo", fontWeight = FontWeight.SemiBold)

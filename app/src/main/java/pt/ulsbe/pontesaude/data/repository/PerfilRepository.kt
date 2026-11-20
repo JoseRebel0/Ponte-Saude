@@ -120,9 +120,16 @@ class PerfilRepository(
         pessoasCuidadas.addAll(encontrados)
     }
 
+    private fun proximoIdPerfil(): String {
+        val gravado = preferencias.getLong("contador_id_perfil", 0L)
+        val maiorAtual = todosOsPerfis.mapNotNull { it.id.toLongOrNull() }.maxOrNull() ?: 0L
+        val proximo = maxOf(gravado, maiorAtual) + 1L
+        preferencias.edit().putLong("contador_id_perfil", proximo).apply()
+        return proximo.toString()
+    }
+
     fun criarPerfilAleatorio(): Perfil {
-        val todosIds = todosOsPerfis.mapNotNull { it.id.toLongOrNull() }
-        val proximoId = ((todosIds.maxOrNull() ?: 0L) + 1).toString()
+        val proximoId = proximoIdPerfil()
         val novo = GeradorDadosPortugal.gerarPerfilAleatorio(proximoId)
         val online = estaOnline()
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), pendente = !online)
@@ -150,8 +157,7 @@ class PerfilRepository(
         tipoSanguineo: String = "A+",
         alergias: String = "Sem alergias conhecidas",
     ): Perfil {
-        val todosIds = todosOsPerfis.mapNotNull { it.id.toLongOrNull() }
-        val proximoId = ((todosIds.maxOrNull() ?: 0L) + 1).toString()
+        val proximoId = proximoIdPerfil()
         val nomeTrim = nome.trim()
         val partes = nomeTrim.split(" ").filter { it.isNotBlank() }
         val nomeCurto = if (partes.size > 1) "${partes.first()} ${partes.last()}" else nomeTrim
@@ -266,6 +272,14 @@ class PerfilRepository(
         dbLocal.consultaDao().apagarPorPerfil(idPerfil)
         dbLocal.notaDao().apagarPorPerfil(idPerfil)
 
+        // Limpar dados em SharedPreferences associados ao perfil apagado
+        val chavesParaApagar = preferencias.all.keys.filter {
+            it.endsWith("_$idPerfil") || it == "historico_ia_$idPerfil"
+        }
+        val editor = preferencias.edit()
+        chavesParaApagar.forEach { editor.remove(it) }
+        editor.apply()
+
         if (estaOnline()) {
             scope.launch {
                 runCatching {
@@ -281,12 +295,17 @@ class PerfilRepository(
         val idsParaApagar = aleatorios.map { it.id }
 
         todosOsPerfis.removeAll { it.id in idsParaApagar }
+        val editor = preferencias.edit()
         idsParaApagar.forEach { id ->
             dbLocal.perfilDao().apagar(id)
             dbLocal.medicamentoDao().apagarPorPerfil(id)
             dbLocal.consultaDao().apagarPorPerfil(id)
             dbLocal.notaDao().apagarPorPerfil(id)
+
+            preferencias.all.keys.filter { it.endsWith("_$id") || it == "historico_ia_$id" }
+                .forEach { editor.remove(it) }
         }
+        editor.apply()
 
         if (estaOnline()) {
             scope.launch {

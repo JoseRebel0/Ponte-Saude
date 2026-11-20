@@ -115,67 +115,97 @@ class ConsultaRepository(
         }
     }
 
-    fun obterChecklistSalva(chave: String): Set<String> {
-        val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
+    fun obterChecklistSalva(idConsulta: Int, idPerfil: String): Set<String> {
+        val cons = if (idPerfil.isNotBlank()) {
+            dbLocal.consultaDao().obterPorIdEPerfil(idConsulta, idPerfil)
+                ?: dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
+        } else {
+            dbLocal.consultaDao().obterPorId(idConsulta)
+        }
+        return cons?.checklistMarcadosJson?.deserializarListaString()?.toSet() ?: emptySet()
+    }
+
+    fun obterChecklistSalva(chave: String, idPerfil: String = ""): Set<String> {
+        val idConsulta = chave.removePrefix("consulta_").substringBefore("_").toIntOrNull()
         if (idConsulta != null) {
-            val todas = dbLocal.consultaDao().obterTodos()
-            val cons = todas.find { it.id == idConsulta }
-            if (cons != null) {
-                return cons.checklistMarcadosJson.deserializarListaString().toSet()
-            }
+            return obterChecklistSalva(idConsulta, idPerfil)
         }
         return emptySet()
     }
 
-    fun salvarChecklist(chave: String, marcados: Set<String>, idPerfil: String = "1") {
-        val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
-        if (idConsulta != null) {
-            val consEnt = dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
-                ?: dbLocal.consultaDao().obterTodos().find { it.id == idConsulta }
-            if (consEnt != null) {
-                consEnt.checklistMarcadosJson = marcados.toList().serializarListaString()
-                consEnt.pendenteSincronizacao = !estaOnline()
-                dbLocal.consultaDao().inserirOuAtualizar(consEnt)
-                if (estaOnline()) {
-                    scope.launch {
-                        runCatching {
-                            clienteFirestore.atualizarChecklistConsulta(consEnt.idPerfil, idConsulta, marcados.toList())
-                        }
+    fun salvarChecklist(idConsulta: Int, idPerfil: String, marcados: Set<String>) {
+        val consEnt = if (idPerfil.isNotBlank()) {
+            dbLocal.consultaDao().obterPorIdEPerfil(idConsulta, idPerfil)
+                ?: dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
+        } else {
+            dbLocal.consultaDao().obterPorId(idConsulta)
+        }
+        if (consEnt != null) {
+            val perfilDestino = if (idPerfil.isNotBlank()) idPerfil else consEnt.idPerfil
+            consEnt.checklistMarcadosJson = marcados.toList().serializarListaString()
+            consEnt.pendenteSincronizacao = !estaOnline()
+            dbLocal.consultaDao().inserirOuAtualizar(consEnt)
+            if (estaOnline() && perfilDestino.isNotBlank()) {
+                scope.launch {
+                    runCatching {
+                        clienteFirestore.atualizarChecklistConsulta(perfilDestino, idConsulta, marcados.toList())
                     }
                 }
             }
         }
     }
 
-    fun obterItensCustomChecklist(chave: String): List<String> {
-        val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
+    fun salvarChecklist(chave: String, marcados: Set<String>, idPerfil: String = "") {
+        val idConsulta = chave.removePrefix("consulta_").substringBefore("_").toIntOrNull()
         if (idConsulta != null) {
-            val todas = dbLocal.consultaDao().obterTodos()
-            val cons = todas.find { it.id == idConsulta }
-            if (cons != null) {
-                return cons.checklistCustomJson.deserializarListaString()
-            }
+            salvarChecklist(idConsulta, idPerfil, marcados)
+        }
+    }
+
+    fun obterItensCustomChecklist(idConsulta: Int, idPerfil: String): List<String> {
+        val cons = if (idPerfil.isNotBlank()) {
+            dbLocal.consultaDao().obterPorIdEPerfil(idConsulta, idPerfil)
+                ?: dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
+        } else {
+            dbLocal.consultaDao().obterPorId(idConsulta)
+        }
+        return cons?.checklistCustomJson?.deserializarListaString() ?: emptyList()
+    }
+
+    fun obterItensCustomChecklist(chave: String, idPerfil: String = ""): List<String> {
+        val idConsulta = chave.removePrefix("consulta_").substringBefore("_").toIntOrNull()
+        if (idConsulta != null) {
+            return obterItensCustomChecklist(idConsulta, idPerfil)
         }
         return emptyList()
     }
 
-    fun salvarItensCustomChecklist(chave: String, itens: List<String>, idPerfil: String = "1") {
-        val idConsulta = chave.removePrefix("consulta_").toIntOrNull()
-        if (idConsulta != null) {
-            val consEnt = dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
-                ?: dbLocal.consultaDao().obterTodos().find { it.id == idConsulta }
-            if (consEnt != null) {
-                consEnt.checklistCustomJson = itens.serializarListaString()
-                consEnt.pendenteSincronizacao = !estaOnline()
-                dbLocal.consultaDao().inserirOuAtualizar(consEnt)
-                if (estaOnline()) {
-                    scope.launch {
-                        runCatching {
-                            clienteFirestore.atualizarChecklistCustomConsulta(consEnt.idPerfil, idConsulta, itens)
-                        }
+    fun salvarItensCustomChecklist(idConsulta: Int, idPerfil: String, itens: List<String>) {
+        val consEnt = if (idPerfil.isNotBlank()) {
+            dbLocal.consultaDao().obterPorIdEPerfil(idConsulta, idPerfil)
+                ?: dbLocal.consultaDao().obterPorPerfil(idPerfil).find { it.id == idConsulta }
+        } else {
+            dbLocal.consultaDao().obterPorId(idConsulta)
+        }
+        if (consEnt != null) {
+            val perfilDestino = if (idPerfil.isNotBlank()) idPerfil else consEnt.idPerfil
+            consEnt.checklistCustomJson = itens.serializarListaString()
+            consEnt.pendenteSincronizacao = !estaOnline()
+            dbLocal.consultaDao().inserirOuAtualizar(consEnt)
+            if (estaOnline() && perfilDestino.isNotBlank()) {
+                scope.launch {
+                    runCatching {
+                        clienteFirestore.atualizarChecklistCustomConsulta(perfilDestino, idConsulta, itens)
                     }
                 }
             }
+        }
+    }
+
+    fun salvarItensCustomChecklist(chave: String, itens: List<String>, idPerfil: String = "") {
+        val idConsulta = chave.removePrefix("consulta_").substringBefore("_").toIntOrNull()
+        if (idConsulta != null) {
+            salvarItensCustomChecklist(idConsulta, idPerfil, itens)
         }
     }
 

@@ -33,10 +33,8 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.SupervisorAccount
-import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,9 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -76,7 +72,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.NotaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
@@ -101,6 +96,7 @@ data class ItemHistoricoIa(
 )
 
 private fun carregarHistoricoIa(context: Context, idPerfil: String): List<ItemHistoricoIa> {
+    if (idPerfil.isBlank()) return emptyList()
     val prefs = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
     val jsonString = prefs.getString("historico_ia_$idPerfil", null) ?: return emptyList()
     return runCatching {
@@ -117,6 +113,7 @@ private fun carregarHistoricoIa(context: Context, idPerfil: String): List<ItemHi
 }
 
 private fun guardarHistoricoIa(context: Context, idPerfil: String, lista: List<ItemHistoricoIa>) {
+    if (idPerfil.isBlank()) return
     val prefs = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
     val array = org.json.JSONArray()
     lista.take(20).forEach { item ->
@@ -184,8 +181,9 @@ fun EcraApontamentos(
         if (!resposta.isNullOrBlank() && !termo.isNullOrBlank() && uiState.perfil?.id == perfil.id) {
             explicacaoTradutor = resposta
             val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+            val historicoAtual = carregarHistoricoIa(contexto, perfil.id)
             val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = resposta.trim(), dataHora = dataAtual)
-            val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
+            val listaAtualizada = listOf(novoItem) + historicoAtual.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
             historicoIa = listaAtualizada
             guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
             viewModel?.consumirExplicacaoIa()
@@ -198,33 +196,35 @@ fun EcraApontamentos(
     val estadoLista = rememberLazyListState()
     val escopo = rememberCoroutineScope()
 
-    fun traduzirConsulta(termo: String) {
-        if (termo.isBlank()) return
-        if (!plataforma.temConexaoInternet()) {
-            avisoSemInternet = true
-            return
-        }
-        avisoSemInternet = false
-        mensagemErroIa = null
-        explicacaoTradutor = null
-        if (viewModel != null) {
-            viewModel.traduzirTermo(termo)
-        } else {
-            aProcessarIa = true
-            escopo.launch {
-                val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
-                resultado.onSuccess { explicacao ->
-                    explicacaoTradutor = explicacao
-                    val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                    val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
-                    val listaAtualizada = listOf(novoItem) + historicoIa.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
-                    historicoIa = listaAtualizada
-                    guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
-                }.onFailure { erro ->
-                    android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
-                    mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
+    val traduzirConsulta: (String) -> Unit = { termo ->
+        if (termo.isNotBlank()) {
+            if (!plataforma.temConexaoInternet()) {
+                avisoSemInternet = true
+            } else {
+                avisoSemInternet = false
+                mensagemErroIa = null
+                explicacaoTradutor = null
+                if (viewModel != null) {
+                    viewModel.traduzirTermo(termo)
+                } else {
+                    aProcessarIa = true
+                    escopo.launch {
+                        val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
+                        resultado.onSuccess { explicacao ->
+                            explicacaoTradutor = explicacao
+                            val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                            val historicoAtual = carregarHistoricoIa(contexto, perfil.id)
+                            val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
+                            val listaAtualizada = listOf(novoItem) + historicoAtual.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
+                            historicoIa = listaAtualizada
+                            guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
+                        }.onFailure { erro ->
+                            android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
+                            mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
+                        }
+                        aProcessarIa = false
+                    }
                 }
-                aProcessarIa = false
             }
         }
     }
@@ -247,7 +247,7 @@ fun EcraApontamentos(
         }
     }
 
-    fun adicionarNotaAoRegisto(texto: String) {
+    val adicionarNotaAoRegisto: (String) -> Unit = { texto ->
         if (texto.isNotBlank()) {
             val autorNota = "Utente"
             if (viewModel != null) {
@@ -258,10 +258,12 @@ fun EcraApontamentos(
         }
     }
 
+    val tituloEcra = if (perfilRepository?.modoCuidador == true) "Notas · ${perfil.nome}" else "Notas"
+    val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
+
     Column(Modifier.fillMaxSize()) {
-        val tituloEcra = if (perfilRepository?.modoCuidador == true) "Notas · ${perfil.nome}" else "Notas"
-        val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
+
         PullToRefreshBox(
             isRefreshing = aAtualizar,
             onRefresh = {
@@ -272,18 +274,20 @@ fun EcraApontamentos(
                     aAtualizar = false
                 }
             },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxSize(),
                 state = estadoLista,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-                if (perfilRepository?.modoCuidador == true) {
-                    item {
+            if (perfilRepository?.modoCuidador == true) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
@@ -316,9 +320,11 @@ fun EcraApontamentos(
                         }
                     }
                 }
+            }
 
-                // 1. TRADUTOR MÉDICO & ASSISTENTE IA NO TOPO
-                item {
+            // 1. TRADUTOR MÉDICO & ASSISTENTE IA NO TOPO
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     CartaoApp {
                         Column(Modifier.padding(vertical = 4.dp)) {
                             Row(
@@ -354,7 +360,10 @@ fun EcraApontamentos(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { mostrarHistoricoIa = true },
+                                    onClick = {
+                                        historicoIa = carregarHistoricoIa(contexto, perfil.id)
+                                        mostrarHistoricoIa = true
+                                    },
                                     modifier = Modifier.size(38.dp),
                                 ) {
                                     Icon(
@@ -549,9 +558,11 @@ fun EcraApontamentos(
                         }
                     }
                 }
+            }
 
-                // 2. BLOCO DE ADICIONAR APONTAMENTO DO UTENTE
-                item {
+            // 2. BLOCO DE ADICIONAR APONTAMENTO DO UTENTE
+            item {
+                Box(Modifier.padding(horizontal = 20.dp)) {
                     CartaoApp {
                         Column {
                             Text(
@@ -604,11 +615,13 @@ fun EcraApontamentos(
                         }
                     }
                 }
+            }
 
-                // 3. LISTA DE APONTAMENTOS REGISTADOS
-                val notas = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.notas else notaRepository?.notas(perfil) ?: perfil.notas
-                if (notas.isEmpty()) {
-                    item {
+            // 3. LISTA DE APONTAMENTOS REGISTADOS
+            val notas = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.notas else notaRepository?.notas(perfil) ?: perfil.notas
+            if (notas.isEmpty()) {
+                item {
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -624,8 +637,10 @@ fun EcraApontamentos(
                             )
                         }
                     }
-                } else {
-                    itemsIndexed(notas) { indice, nota ->
+                }
+            } else {
+                itemsIndexed(notas) { indice, nota ->
+                    Box(Modifier.padding(horizontal = 20.dp)) {
                         CartaoApp {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -653,6 +668,7 @@ fun EcraApontamentos(
             }
         }
     }
+}
 
     if (avisoSemInternet) {
         AlertDialog(

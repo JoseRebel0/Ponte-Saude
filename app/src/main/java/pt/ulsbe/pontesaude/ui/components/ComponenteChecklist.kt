@@ -88,25 +88,45 @@ fun ChecklistInterativa(
     subtitulo: String? = null,
     itensPredefinidos: List<ItemChecklist>,
     chavePersistencia: String,
+    idPerfil: String = "",
     consultaRepository: ConsultaRepository? = null,
     plataforma: ServicosDispositivo? = null,
     permiteAdicionar: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val marcados = remember(chavePersistencia) {
-        val salvos = consultaRepository?.obterChecklistSalva(chavePersistencia).orEmpty()
+    val chaveEfetiva = if (idPerfil.isNotBlank()) "${chavePersistencia}_$idPerfil" else chavePersistencia
+    val marcados = remember(chaveEfetiva) {
+        val salvos = if (idPerfil.isNotBlank()) {
+            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+            if (idCons != null && consultaRepository != null) {
+                consultaRepository.obterChecklistSalva(idCons, idPerfil)
+            } else {
+                consultaRepository?.obterChecklistSalva(chavePersistencia, idPerfil).orEmpty()
+            }
+        } else {
+            consultaRepository?.obterChecklistSalva(chavePersistencia).orEmpty()
+        }
         mutableStateMapOf<String, Boolean>().apply {
             salvos.forEach { put(it, true) }
         }
     }
 
-    val customItens = remember(chavePersistencia) {
-        val salvosCustom = consultaRepository?.obterItensCustomChecklist(chavePersistencia).orEmpty()
+    val customItens = remember(chaveEfetiva) {
+        val salvosCustom = if (idPerfil.isNotBlank()) {
+            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+            if (idCons != null && consultaRepository != null) {
+                consultaRepository.obterItensCustomChecklist(idCons, idPerfil)
+            } else {
+                consultaRepository?.obterItensCustomChecklist(chavePersistencia, idPerfil).orEmpty()
+            }
+        } else {
+            consultaRepository?.obterItensCustomChecklist(chavePersistencia).orEmpty()
+        }
         mutableStateListOf<ItemChecklist>().apply {
             salvosCustom.forEachIndexed { i, texto ->
                 add(
                     ItemChecklist(
-                        id = "custom_${chavePersistencia}_$i",
+                        id = "custom_${chaveEfetiva}_$i",
                         texto = texto,
                         categoria = CategoriaChecklist.GERAL,
                         personalizado = true,
@@ -122,17 +142,29 @@ fun ChecklistInterativa(
     var filtroAtual by remember { mutableStateOf(FiltroChecklist.TODAS) }
 
     fun sincronizarMarcados() {
-        consultaRepository?.salvarChecklist(
-            chavePersistencia,
-            marcados.filter { it.value }.keys.toSet(),
-        )
+        val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+        if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
+            consultaRepository.salvarChecklist(idCons, idPerfil, marcados.filter { it.value }.keys.toSet())
+        } else {
+            consultaRepository?.salvarChecklist(
+                chavePersistencia,
+                marcados.filter { it.value }.keys.toSet(),
+                idPerfil,
+            )
+        }
     }
 
     fun sincronizarCustom() {
-        consultaRepository?.salvarItensCustomChecklist(
-            chavePersistencia,
-            customItens.map { it.texto },
-        )
+        val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+        if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
+            consultaRepository.salvarItensCustomChecklist(idCons, idPerfil, customItens.map { it.texto })
+        } else {
+            consultaRepository?.salvarItensCustomChecklist(
+                chavePersistencia,
+                customItens.map { it.texto },
+                idPerfil,
+            )
+        }
     }
 
     val todosOsItens = (itensPredefinidos + customItens).map { item ->

@@ -17,6 +17,9 @@ public interface MedicamentoDao {
     @Query("SELECT * FROM medicamentos WHERE id = :id LIMIT 1")
     MedicamentoEntity obterPorId(long id);
 
+    @Query("SELECT * FROM medicamentos WHERE id = :id AND idPerfil = :idPerfil LIMIT 1")
+    MedicamentoEntity obterPorIdEPerfil(long id, String idPerfil);
+
     @Query("SELECT * FROM medicamentos WHERE idPerfil = :idPerfil")
     List<MedicamentoEntity> obterPorPerfil(String idPerfil);
 
@@ -28,6 +31,9 @@ public interface MedicamentoDao {
 
     @Query("DELETE FROM medicamentos WHERE id = :id")
     void apagarPorId(long id);
+
+    @Query("DELETE FROM medicamentos WHERE id = :id AND idPerfil = :idPerfil")
+    void apagarPorIdEPerfil(long id, String idPerfil);
 
     @Query("DELETE FROM medicamentos WHERE idPerfil = :idPerfil")
     void apagarPorPerfil(String idPerfil);

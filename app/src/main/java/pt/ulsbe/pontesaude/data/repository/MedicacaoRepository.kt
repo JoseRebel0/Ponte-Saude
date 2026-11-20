@@ -75,7 +75,7 @@ class MedicacaoRepository(
         val atuais = medicamentos(perfil).filterNot { it.id == id }
         listaMedicamentos[perfil.id] = atuais
 
-        dbLocal.medicamentoDao().apagarPorId(id)
+        dbLocal.medicamentoDao().apagarPorIdEPerfil(id, perfil.id)
 
         if (estaOnline()) {
             scope.launch {

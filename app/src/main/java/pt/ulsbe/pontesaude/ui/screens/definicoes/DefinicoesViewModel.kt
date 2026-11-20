@@ -31,7 +31,7 @@ data class DefinicoesUiState(
     val altoContraste: Boolean = false,
     val reduzirMovimento: Boolean = false,
     val notificacoesAtivas: Boolean = true,
-    val somVozAtivo: Boolean = true,
+    val somVozAtivo: Boolean = false,
     val agendaEAlarmesAtivos: Boolean = true,
     val modoCuidador: Boolean = false,
     val pessoasCuidadas: List<Perfil> = emptyList(),
@@ -86,14 +86,6 @@ class DefinicoesViewModel(
     }
 
     /**
-     * Alterna o modo de alto contraste.
-     */
-    fun definirAltoContraste(ativo: Boolean) {
-        configuracaoRepository.atualizarAltoContraste(ativo)
-        recarregar()
-    }
-
-    /**
      * Alterna a redução de animações e movimentos no Jetpack Compose.
      */
     fun definirReduzirMovimento(ativo: Boolean) {
@@ -106,14 +98,6 @@ class DefinicoesViewModel(
      */
     fun definirNotificacoes(ativas: Boolean) {
         configuracaoRepository.atualizarNotificacoesAtivas(ativas)
-        recarregar()
-    }
-
-    /**
-     * Liga ou desliga o motor de síntese de voz (TTS) para leitura assistida.
-     */
-    fun definirSomVoz(ativo: Boolean) {
-        configuracaoRepository.atualizarSomVoz(ativo)
         recarregar()
     }
 

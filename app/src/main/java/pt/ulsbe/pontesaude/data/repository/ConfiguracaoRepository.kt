@@ -27,7 +27,7 @@ class ConfiguracaoRepository(context: Context) {
     var altoContraste by mutableStateOf(preferencias.getBoolean("alto_contraste", false))
         private set
 
-    var somVozAtivo by mutableStateOf(preferencias.getBoolean("som_voz_ativo", true))
+    var somVozAtivo by mutableStateOf(preferencias.getBoolean("som_voz_ativo", false))
         private set
 
     var notificacoesAtivas by mutableStateOf(preferencias.getBoolean("notificacoes_ativas", true))

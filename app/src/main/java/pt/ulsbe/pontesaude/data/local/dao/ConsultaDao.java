@@ -20,6 +20,9 @@ public interface ConsultaDao {
     @Query("SELECT * FROM consultas WHERE id = :id LIMIT 1")
     ConsultaEntity obterPorId(int id);
 
+    @Query("SELECT * FROM consultas WHERE id = :id AND idPerfil = :idPerfil LIMIT 1")
+    ConsultaEntity obterPorIdEPerfil(int id, String idPerfil);
+
     @Query("SELECT * FROM consultas WHERE idPerfil = :idPerfil")
     List<ConsultaEntity> obterPorPerfil(String idPerfil);
 
