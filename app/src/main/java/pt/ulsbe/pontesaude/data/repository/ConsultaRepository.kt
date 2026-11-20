@@ -31,8 +31,16 @@ class ConsultaRepository(
         listaConsultas[idPerfil] = consultas
     }
 
-    fun consultas(perfil: Perfil): List<Consulta> =
-        listaConsultas[perfil.id] ?: perfil.consultas
+    fun consultas(perfil: Perfil): List<Consulta> {
+        val emMemoria = listaConsultas[perfil.id]
+        if (!emMemoria.isNullOrEmpty()) return emMemoria
+        val doRoom = dbLocal.consultaDao().obterPorPerfil(perfil.id).map { it.paraModelo() }
+        if (doRoom.isNotEmpty()) {
+            listaConsultas[perfil.id] = doRoom
+            return doRoom
+        }
+        return perfil.consultas
+    }
 
     fun atualizarListaEmMemoria(idPerfil: String, consultas: List<Consulta>) {
         listaConsultas[idPerfil] = consultas

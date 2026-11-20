@@ -30,8 +30,16 @@ class NotaRepository(
         listaNotas[idPerfil] = notas
     }
 
-    fun notas(perfil: Perfil): List<Nota> =
-        listaNotas[perfil.id] ?: perfil.notas
+    fun notas(perfil: Perfil): List<Nota> {
+        val emMemoria = listaNotas[perfil.id]
+        if (!emMemoria.isNullOrEmpty()) return emMemoria
+        val doRoom = dbLocal.notaDao().obterPorPerfil(perfil.id).map { it.paraModelo() }
+        if (doRoom.isNotEmpty()) {
+            listaNotas[perfil.id] = doRoom
+            return doRoom
+        }
+        return perfil.notas
+    }
 
     fun produtos(perfil: Perfil): List<String> =
         listaProdutos[perfil.id] ?: perfil.outrosProdutos

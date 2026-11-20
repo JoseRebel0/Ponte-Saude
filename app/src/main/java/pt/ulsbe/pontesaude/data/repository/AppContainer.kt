@@ -11,6 +11,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
+import pt.ulsbe.pontesaude.data.local.deserializarListaString
+import pt.ulsbe.pontesaude.data.local.entity.PerfilEntity
 import pt.ulsbe.pontesaude.data.local.paraEntidade
 import pt.ulsbe.pontesaude.data.local.paraModelo
 import pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD
@@ -159,7 +161,9 @@ class AppContainer(context: Context) {
                 }
             } else {
                 // No ecrã de login / demonstração: preservar TODOS os perfis existentes no Room local e integrar os remotos
-                val locaisRoom = dbLocal.perfilDao().obterTodos().map { it.paraModelo() }
+                val locaisRoom = (dbLocal.perfilDao().obterTodos() ?: emptyList()).map { entity: PerfilEntity ->
+                    entity.paraModelo()
+                }
                 val mapaUnificado = (locaisRoom + perfil.todosOsPerfis + remotos).associateBy { it.id }.toMutableMap()
                 perfil.todosOsPerfis.clear()
                 perfil.todosOsPerfis.addAll(mapaUnificado.values)
@@ -192,14 +196,45 @@ class AppContainer(context: Context) {
                             false,
                         ),
                     )
-                    dbLocal.medicamentoDao().apagarPorPerfil(p.id)
-                    dbLocal.medicamentoDao().inserirVarios(p.medicamentos.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
-                    dbLocal.consultaDao().apagarPorPerfil(p.id)
-                    dbLocal.consultaDao().inserirVarios(p.consultas.map { it.paraEntidade(idPerfil = p.id, pendente = false) })
+
+                    // Medicação: preservar fotografias locais existentes se a remota for nula ou em branco
+                    for (m in p.medicamentos) {
+                        val localMed = dbLocal.medicamentoDao().obterPorIdEPerfil(m.id, p.id)
+                        val fotoFinal = m.fotografia?.takeIf { it.isNotBlank() } ?: localMed?.fotografia
+                        val medFinal = m.copy(fotografia = fotoFinal)
+                        dbLocal.medicamentoDao().inserirOuAtualizar(medFinal.paraEntidade(idPerfil = p.id, pendente = false))
+                    }
+                    medicacao.carregarDadosLocais(p.id)
+
+                    // Consultas: preservar e fundir checklists marcadas e itens personalizados locais e remotos
+                    for (c in p.consultas) {
+                        val localCons = dbLocal.consultaDao().obterPorIdEPerfil(c.id, p.id)
+                        val marcadosLocais = localCons?.checklistMarcadosJson?.deserializarListaString().orEmpty()
+                        val marcadosRemotos = item.checklistsConsultas[c.id]?.first.orEmpty()
+                        val marcadosFinais = (marcadosLocais + marcadosRemotos).distinct()
+
+                        val customLocais = localCons?.checklistCustomJson?.deserializarListaString().orEmpty()
+                        val customRemotos = item.checklistsConsultas[c.id]?.second.orEmpty()
+                        val customFinais = (customLocais + customRemotos).distinct()
+
+                        dbLocal.consultaDao().inserirOuAtualizar(
+                            c.paraEntidade(
+                                idPerfil = p.id,
+                                marcados = marcadosFinais,
+                                custom = customFinais,
+                                pendente = false,
+                            ),
+                        )
+                    }
+                    consultas.carregarDadosLocais(p.id)
+
+                    val notasLocais = dbLocal.notaDao().obterPorPerfil(p.id).map { it.paraModelo() }
+                    val notasFinais = (notasLocais + p.notas).distinctBy { it.texto.trim() }
                     dbLocal.notaDao().apagarPorPerfil(p.id)
-                    for (n in p.notas) {
+                    for (n in notasFinais) {
                         dbLocal.notaDao().inserir(pt.ulsbe.pontesaude.data.local.entity.NotaEntity(0, p.id, n.texto, n.autor, false))
                     }
+                    notas.carregarDadosLocais(p.id)
                 }
             }
             versaoSincronizacao++
