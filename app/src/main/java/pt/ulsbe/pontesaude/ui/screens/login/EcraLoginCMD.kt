@@ -163,10 +163,16 @@ fun EcraLoginCMD(
         escopo.launch {
             textoProgresso = "A ligar a Autenticação.gov..."
             delay(300)
-            val ident: String = when {
-                passo == 2 && modoId == ModoIdentificacao.TELEMOVEL -> telemovel
-                passo == 2 -> nif
-                else -> perfisDemonstracao.find { it.id == idPerfil }?.telemovel?.ifBlank { idPerfil } ?: idPerfil
+            val perfilAlvo = perfisDemonstracao.firstOrNull { it.id == idPerfil }
+            val telPerfil = perfilAlvo?.telemovel?.trim().orEmpty()
+            val ident: String = if (passo == 2 && modoId == ModoIdentificacao.TELEMOVEL) {
+                telemovel
+            } else if (passo == 2) {
+                nif
+            } else if (telPerfil.isNotEmpty()) {
+                telPerfil
+            } else {
+                idPerfil
             }
             textoProgresso = "A validar Chave Móvel Digital..."
             pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD.autenticarComCMD(ident)

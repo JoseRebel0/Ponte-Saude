@@ -76,10 +76,10 @@ class IntegracaoIA {
 
                     REGRAS OBRIGATÓRIAS DE GERAÇÃO:
                     1. IDENTIFICAÇÃO DO UTENTE:
-                       - "nome": Nome completo português realista (ex: "Manuel António Ferreira", "Maria da Conceição Sousa", "Carlos Alberto Martins").
-                       - "nomeCurto": Primeiro e último nome (ex: "Manuel Ferreira", "Maria Sousa").
-                       - "tipoSanguineo": Um dos tipos reais ("A+", "A-", "B+", "B-", "O+", "O-", "AB+").
-                       - "alergias": Alergia clínica comum (ex: "Penicilina e derivados", "AINEs / Aspirina", "Iodo e contrastes") ou "Sem alergias conhecidas".
+                       - "nome": Nome completo português realista.
+                       - "nomeCurto": Primeiro e último nome.
+                       - "tipoSanguineo": Um dos tipos reais.
+                       - "alergias": Alergia clínica comum.
                        - "dataNascimento": Data no formato DD/MM/AAAA para um utente adulto ou idoso (entre 1945 e 1980).
                        - "numeroUtente": 9 dígitos formatados como "XXX XXX XXX".
                        - "nif": 9 dígitos portugueses começados por 1 ou 2, formatados como "XXX XXX XXX".
@@ -180,16 +180,54 @@ class IntegracaoIA {
     /**
      * Gera dinamicamente com Inteligência Artificial (Gemini) um perfil clínico completo, autêntico e
      * adaptado ao Serviço Nacional de Saúde português e à ULSBE.
+     *
+     * Utiliza sementes aleatórias dinâmicas para assegurar máxima variedade em nomes, idades, géneros e patologias.
      */
     suspend fun gerarPerfilClinicoComIA(id: String, telemovel: String): Result<Perfil> = withContext(Dispatchers.IO) {
         try {
-            val prompt = "Gera um perfil clínico completo para um utente com número de telemóvel '$telemovel'."
+            val random = java.util.Random()
+            val eFeminino = random.nextBoolean()
+            val primeiroNome = if (eFeminino) {
+                NOMES_FEMININOS[random.nextInt(NOMES_FEMININOS.size)]
+            } else {
+                NOMES_MASCULINOS[random.nextInt(NOMES_MASCULINOS.size)]
+            }
+            val apelido1 = APELIDOS[random.nextInt(APELIDOS.size)]
+            var apelido2 = APELIDOS[random.nextInt(APELIDOS.size)]
+            while (apelido2 == apelido1) {
+                apelido2 = APELIDOS[random.nextInt(APELIDOS.size)]
+            }
+            val nomeSugerido = "$primeiroNome $apelido1 $apelido2"
+            val idade = 45 + random.nextInt(40) // 45 a 84 anos
+            val anoNasc = 2026 - idade
+            val diaNasc = String.format("%02d", 1 + random.nextInt(28))
+            val mesNasc = String.format("%02d", 1 + random.nextInt(12))
+            val dataNascSugerida = "$diaNasc/$mesNasc/$anoNasc"
+            val cenario = CENARIOS_CLINICOS[random.nextInt(CENARIOS_CLINICOS.size)]
+            val unidade = UNIDADES_ULSBE[random.nextInt(UNIDADES_ULSBE.size)]
+
+            val prompt = """
+                Gera um perfil clínico português único e diversificado:
+                - Nome sugerido: $nomeSugerido
+                - Género: ${if (eFeminino) "Feminino" else "Masculino"}
+                - Idade: $idade anos (Data de Nascimento: $dataNascSugerida)
+                - Foco de Saúde: $cenario
+                - Centro de Saúde / Unidade ULSBE: $unidade
+                - Telemóvel do utente: $telemovel
+                
+                REGRAS OBRIGATÓRIAS:
+                - PROIBIDO usar nomes repetidos como "Manuel António Ferreira" ou dados genéricos anteriores.
+                - Os medicamentos gerados devem ser autorizados pelo Infarmed e indicados para: $cenario.
+                - As notas e apontamentos devem ser dúvidas/lembretes escritos pelo próprio utente para colocar ao médico na consulta sobre este problema de saúde.
+                - Devolve única e exclusivamente o objeto JSON puro.
+            """.trimIndent()
+
             val resposta = modeloGeradorPerfil.generateContent(prompt)
             val jsonTexto = resposta.text?.trim()
             if (jsonTexto.isNullOrBlank()) {
                 return@withContext Result.failure(Exception("A IA devolveu uma resposta vazia."))
             }
-            val perfil = decodificarPerfilJson(jsonTexto, id, telemovel)
+            val perfil = decodificarPerfilJson(jsonTexto, id, telemovel, nomeSugerido, dataNascSugerida)
             Result.success(perfil)
         } catch (e: Exception) {
             android.util.Log.e("FirebaseAI", "Erro ao gerar perfil clínico com IA: ${e.message}", e)
@@ -197,20 +235,26 @@ class IntegracaoIA {
         }
     }
 
-    private fun decodificarPerfilJson(rawJson: String, id: String, telemovel: String): Perfil {
+    private fun decodificarPerfilJson(
+        rawJson: String,
+        id: String,
+        telemovel: String,
+        nomeFallback: String = "António Silva",
+        dataNascFallback: String = "15/06/1960",
+    ): Perfil {
         val limpo = rawJson
             .replace("```json", "")
             .replace("```", "")
             .trim()
         val json = JSONObject(limpo)
-        val nome = json.optString("nome", "Manuel António Ferreira")
-        val nomeCurto = json.optString("nomeCurto", nome.split(" ").firstOrNull() ?: "Manuel")
+        val nome = json.optString("nome", nomeFallback)
+        val nomeCurto = json.optString("nomeCurto", nome.split(" ").firstOrNull() ?: nomeFallback.split(" ").first())
         val tipoSanguineo = json.optString("tipoSanguineo", "A+")
         val alergias = json.optString("alergias", "Sem alergias conhecidas")
         val nif = json.optString("nif", "214 875 920")
         val numeroUtente = json.optString("numeroUtente", "189 423 761")
         val cartaoCidadao = json.optString("cartaoCidadao", "13849204 4 ZX2")
-        val dataNascimento = json.optString("dataNascimento", "14/05/1958")
+        val dataNascimento = json.optString("dataNascimento", dataNascFallback)
         val email = json.optString("email", "${nomeCurto.lowercase().replace(" ", ".")}@exemplo.pt")
 
         val iniciais = nome.split(" ")
@@ -303,6 +347,48 @@ class IntegracaoIA {
             dataNascimento = dataNascimento,
             telemovel = telemovel,
             email = email,
+        )
+    }
+
+    companion object {
+        private val NOMES_MASCULINOS = listOf(
+            "António", "José", "João", "Francisco", "Joaquim", "Manuel", "Carlos", "Fernando",
+            "Luís", "Jorge", "Rui", "Paulo", "Eduardo", "Mário", "Álvaro", "Domingos", "Vítor",
+            "Henrique", "Alberto", "Alfredo", "Artur", "Augusto", "Bernardo", "César", "Duarte",
+            "Gil", "Jaime", "Raul", "Sebastião", "Vicente"
+        )
+        private val NOMES_FEMININOS = listOf(
+            "Maria de Fátima", "Ana", "Maria da Conceição", "Maria Helena", "Teresa", "Rosa",
+            "Isabel", "Helena", "Lurdes", "Alzira", "Beatriz", "Carla", "Dulce", "Eduarda",
+            "Filomena", "Graça", "Inês", "Judite", "Laura", "Margarida", "Natália", "Odete",
+            "Paula", "Rita", "Silvia", "Vera", "Alice", "Amélia", "Célia", "Glória"
+        )
+        private val APELIDOS = listOf(
+            "Silva", "Santos", "Ferreira", "Pereira", "Oliveira", "Costa", "Rodrigues", "Martins",
+            "Sousa", "Fernandes", "Gonçalves", "Gomes", "Lopes", "Marques", "Alves", "Almeida",
+            "Ribeiro", "Pinto", "Carvalho", "Teixeira", "Moreira", "Correia", "Mendes", "Nogueira",
+            "Neves", "Ramos", "Machado", "Fontes", "Matos", "Peixoto", "Guimarães", "Alpoim",
+            "Bessa", "Faria", "Teles", "Frois", "Cardoso", "Miranda", "Coelho", "Reis"
+        )
+        private val CENARIOS_CLINICOS = listOf(
+            "Hipertensão Arterial e Arritmia Cardíaca (necessita de anti-hipertensores e controlo de pulso)",
+            "Diabetes Mellitus Tipo 2 e Dislipidemia (necessita de antidiabéticos orais e estatina)",
+            "Osteoartrose e Dores Articulares nos Joelhos (necessita de analgésicos e anti-inflamatórios)",
+            "Doença Pulmonar Obstrutiva Crónica (DPOC) e Bronquite Crónica (necessita de inaladores)",
+            "Fibrilhação Auricular e Terapêutica Hipocoagulante (necessita de controlo rigoroso de coagulação)",
+            "Glaucoma de Ângulo Aberto e Hipertensão Ocular (necessita de colírios oftálmicos diários)",
+            "Insuficiência Cardíaca Ligeira e Retenção de Líquidos (necessita de diurético e vasodilatador)",
+            "Refluxo Gastroesofágico e Gastrite Crónica (necessita de protetor gástrico em jejum)"
+        )
+        private val UNIDADES_ULSBE = listOf(
+            "ULSBE · Hospital Santa Maria Maior (Barcelos)",
+            "ULSBE · USF Barcelos Norte",
+            "ULSBE · USF Santo António (Barcelos)",
+            "ULSBE · USF Gil Vicente",
+            "ULSBE · Centro de Saúde de Esposende",
+            "ULSBE · USF Farol de Esposende",
+            "ULSBE · USF Terras de Fão",
+            "ULSBE · USF Alcaides de Faria"
         )
     }
 }

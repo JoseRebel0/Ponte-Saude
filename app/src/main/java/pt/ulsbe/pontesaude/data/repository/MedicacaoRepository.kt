@@ -31,8 +31,16 @@ class MedicacaoRepository(
         listaMedicamentos[idPerfil] = meds
     }
 
-    fun medicamentos(perfil: Perfil): List<Medicamento> =
-        listaMedicamentos[perfil.id] ?: perfil.medicamentos
+    fun medicamentos(perfil: Perfil): List<Medicamento> {
+        val emMemoria = listaMedicamentos[perfil.id]
+        if (!emMemoria.isNullOrEmpty()) return emMemoria
+        val doRoom = dbLocal.medicamentoDao().obterPorPerfil(perfil.id).map { it.paraModelo() }
+        if (doRoom.isNotEmpty()) {
+            listaMedicamentos[perfil.id] = doRoom
+            return doRoom
+        }
+        return perfil.medicamentos
+    }
 
     fun atualizarListaEmMemoria(idPerfil: String, meds: List<Medicamento>) {
         listaMedicamentos[idPerfil] = meds
