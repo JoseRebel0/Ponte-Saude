@@ -1,29 +1,7 @@
-local.properties
-.gradle/
-.kotlin/
-.gradletasknamecache
-configuration-cache/
-
-build/
-**/build/
-bin/
-gen/
-out/
-target/
-
-*.apk
-*.aab
-*.aar
-*.ap_
-*.dex
-*.class
-
-proguard/
-**/proguard/
-*.pro.mapping
-
+# ==========================================
+# Android Studio e IntelliJ IDEA
+# ==========================================
 .idea/
-!.idea/vcs.xml
 *.iml
 *.ipr
 *.iws
@@ -33,6 +11,44 @@ captures/
 .cxx/
 .vscode/
 
+# ==========================================
+# Gradle e Processos de Compilação
+# ==========================================
+.gradle/
+.kotlin/
+.gradletasknamecache
+configuration-cache/
+build/
+**/build/
+bin/
+gen/
+out/
+target/
+
+# ==========================================
+# Ficheiros e Binários Gerados
+# ==========================================
+*.apk
+*.aab
+*.apks
+*.aar
+*.ap_
+*.dex
+*.class
+
+# Proguard / R8
+proguard/
+**/proguard/
+*.pro.mapping
+
+# ==========================================
+# Configurações de Máquina Local
+# ==========================================
+local.properties
+
+# ==========================================
+# Certificados, Chaves e Assinaturas Privadas
+# ==========================================
 *.jks
 *.keystore
 *.p12
@@ -48,7 +64,9 @@ secrets.properties
 apikey.properties
 secure.properties
 
-
+# ==========================================
+# Contas de Serviço e Credenciais Sensíveis
+# ==========================================
 firebase-adminsdk*.json
 **/firebase-adminsdk*.json
 service-account*.json
@@ -60,6 +78,7 @@ credentials*.json
 auth*.json
 **/auth*.json
 
+# Variáveis de ambiente e tokens
 .env
 .env.*
 *.env
@@ -70,31 +89,46 @@ id_ed25519
 id_ed25519.pub
 secring.gpg
 
+# ==========================================
+# Relatórios, Logs e Profiling
+# ==========================================
 *.log
 *.hprof
 *.trace
 reports/
+**/reports/
 lint/
+**/lint/
 
+# ==========================================
+# Ficheiros Temporários e do Sistema Operativo
+# ==========================================
+# Windows
 Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
 ~$*
 *.tmp
+*.bak
+*.swp
+*.orig
 
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 
+# Linux / Editores
 *~
 .directory
 
-# Manter o ficheiro google-services.json visivel para a equipa
+# ==========================================
+# Exceções Explícitas (Ficheiros a Manter)
+# ==========================================
 !google-services.json
 !app/google-services.json
 !**/google-services.json
-
 !gradle-wrapper.jar
