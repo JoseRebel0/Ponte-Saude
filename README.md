@@ -1,107 +1,117 @@
 # Ponte-Saúde (ULSBE)
 
-Aplicação móvel Android desenvolvida em Kotlin e Jetpack Compose para apoiar utentes do Serviço Nacional de Saúde (SNS) e os seus cuidadores na gestão diária de saúde, medicação e consultas médicas.
+Aplicação móvel de saúde digital desenvolvida para apoiar os utentes da Unidade Local de Saúde do Baixo Alentejo (ULSBE) e os seus respetivos cuidadores na gestão clínica diária, adesão à terapêutica e literacia em saúde.
 
-> Nota: Este projeto encontra-se atualmente em fase de desenvolvimento (Work in Progress).
-
----
-
-## Objetivo
-
-Criar uma interface simples, acessível e intuitiva que sirva de ligação entre o utente, os seus cuidadores e os serviços de saúde, facilitando a adesão aos tratamentos e a literacia em saúde.
+> Estado do Projeto: Em desenvolvimento (Work in Progress).
 
 ---
 
-## Principais Funcionalidades
+## Contexto e Motivação
 
-- Início (Resumo Diário):
-  - Vista rápida das próximas tomas de medicação e consultas agendadas.
-  - Indicadores de tarefas do dia e estado geral de saúde.
+A região do Baixo Alentejo caracteriza-se por uma grande dispersão geográfica, uma população acentuadamente envelhecida e desafios significativos no acesso presencial frequente a cuidados de saúde secundários. Adicionalmente, muitas áreas rurais enfrentam conectividade móvel intermitente.
 
-- Medicação:
-  - Registo de medicamentos, doses, horários e instruções de toma.
-  - Associação de fotografias aos medicamentos para identificação rápida.
-  - Alarmes e notificações de lembrete no dispositivo.
-
-- Consultas e Exames:
-  - Agenda de consultas médicas e exames complementares.
-  - Lista de verificação para preparação prévia (ex.: jejum, exames a levar).
-  - Sincronização direta com a aplicação de Calendário do Android.
-
-- Notas e Tradutor Médico (IA):
-  - Registo de sintomas, dúvidas e apontamentos para colocar ao médico na consulta.
-  - Suporte a ditado por voz.
-  - Explicação e simplificação de termos clínicos através de Inteligência Artificial.
-
-- Literacia em Saúde e Segurança:
-  - Módulos informativos e vídeos sobre saúde preventiva e segurança do doente.
-  - Questionários interativos com sistema de pontos e incentivos.
-
-- Modo Cuidador:
-  - Alternância rápida entre a conta do próprio utilizador e os perfis de familiares ou dependentes ao seu cuidado.
+O projeto **Ponte-Saúde** surge para dar resposta a esta realidade, funcionando como um canal direto e simplificado entre o cidadão e os serviços de saúde locais:
+- Promove a adesão à medicação em doentes polimedicados e crónicos.
+- Apoia ativamente os cuidadores familiares (informais) na gestão de múltiplos dependentes.
+- Reduz a ansiedade e as faltas a consultas através de listas de preparação prévia e integração com o calendário do telemóvel.
+- Eleva a literacia clínica da população sénior com conteúdos educativos certificados e gamificação positiva.
+- Garante total operacionalidade sem ligação à internet através de uma arquitetura estritamente Offline-First.
 
 ---
 
-## Arquitetura do Projeto
+## Pilares Fundamentais
 
-O projeto segue o padrão **MVVM (Model-View-ViewModel)** com uma abordagem **Offline-First**, garantindo que a aplicação permanece totalmente funcional mesmo sem ligação à internet:
+### 1. Acessibilidade e Design Inclusivo para a População Sénior
+- Interface com zonas de toque alargadas, navegação simplificada e contrastes visuais elevados.
+- Suporte a modo de texto ampliado (acessibilidade visual).
+- Leitura em voz alta (Text-to-Speech / TTS) em todos os módulos educativos de saúde.
+- Ditado por voz integrado para notas e dúvidas, evitando a necessidade de digitação em teclados pequenos.
 
-1. **Camada de Apresentação (View):** Construída com Jetpack Compose. Observa fluxos de estado imutáveis (`StateFlow`) expostos pelos ViewModels e reage a eventos do utilizador.
-2. **Camada de Gestão de Estado (ViewModel):** Responsável por processar a lógica de apresentação, comunicar com os repositórios e atualizar o estado da interface.
-3. **Camada de Repositório (Repository & AppContainer):** Centraliza a lógica de dados, coordenando a leitura/escrita na base de dados local, na cache em memória e a sincronização com a nuvem.
-4. **Persistência Local (Room SQLite):** Funciona como a fonte de verdade primária no dispositivo. Os dados são carregados instantaneamente e guardados localmente.
-5. **Sincronização Remota (Firebase Firestore):** Sincroniza dados em tempo real em segundo plano quando existe conectividade, resolvendo operações pendentes criadas offline.
+### 2. Gestão de Medicação e Segurança do Doente
+- Registo completo de fármacos, horários de toma, dosagens e instruções (ex.: em jejum, após refeição).
+- Associação de fotografias da caixa ou comprimido para identificação visual imediata.
+- Sistema de alarmes exatos do Android e notificações persistentes de lembrete.
 
-### Estrutura de Pastas e Pacotes
+### 3. Agenda de Consultas e Preparação Prévia
+- Registo e acompanhamento de consultas nos Cuidados de Saúde Primários e Hospitalares da ULSBE.
+- Listas de verificação interativas antes da consulta (jejum, análises, transporte, medicação habitual).
+- Sincronização automática com o calendário nativo do dispositivo móvel.
+
+### 4. Modo Cuidador (Multi-Perfil)
+- Permite que um filho, familiar ou cuidador formal faça a gestão partilhada da saúde de um ou mais utentes.
+- Alternância rápida de perfil a partir de qualquer ecrã, mantendo dados clínicos estritamente isolados.
+
+### 5. Literacia em Saúde e Clube de Segurança ULSBE
+- Módulos educativos baseados nas metas internacionais de segurança do doente (higiene das mãos, prevenção de quedas, medicação segura, cirurgia segura).
+- Catálogo de vídeos clínicos curtos e explicativos.
+- Gamificação: a leitura de módulos e resolução de pequenos questionários atribui Pontos de Segurança que podem ser convertidos em vouchers (ex.: organizadores semanais de medicação).
+
+### 6. Apoio à Comunicação Clínica com Inteligência Artificial (Gemini)
+- Tradutor Médico: simplificação de linguagem clínica complexa e relatórios para termos claros e compreensíveis pelo utente comum.
+- Geração assistida de notas com dúvidas a colocar ao médico ou enfermeiro de família.
+
+---
+
+## Arquitetura do Sistema
+
+A aplicação assenta no padrão **MVVM (Model-View-ViewModel)** combinado com uma estratégia **Offline-First**, estruturada para responder aos desafios de conectividade:
+
+1. **Camada de Apresentação (View):** Desenvolvida integralmente em Jetpack Compose com componentes Material 3. Reage em tempo real a fluxos imutáveis expostos pelos ViewModels.
+2. **Camada de Gestão de Estado (ViewModel):** Gere o ciclo de vida dos ecrãs, expõe dados através de `StateFlow` e recebe as intenções do utilizador.
+3. **Camada de Repositório (Repository Pattern):** Coordenada pelo `AppContainer`, gere as operações de leitura e escrita garantindo que a base de dados local tem prioridade.
+4. **Persistência Local (Room / SQLite):** Base de dados local no dispositivo. Assegura que toda a informação (medicação, alarmes, consultas e notas) está acessível sem rede.
+5. **Nuvem e Sincronização (Firebase Firestore):** Sincronização bidirecional em tempo real. As alterações feitas offline são marcadas com sinalizadores de pendência e sincronizadas em lote com a nuvem quando a rede é restabelecida.
+6. **Privacidade e Proteção de Dados (RGPD):** Criptografia local simétrica (AES-256) em campos sensíveis de identificação antes do envio para serviços de nuvem.
+
+### Organização de Pastas e Ficheiros
 
 ```text
 pt/ulsbe/pontesaude/
-├── data/                      Camada de acesso a dados e persistência
-│   ├── local/                 Base de dados local (Room / SQLite)
-│   │   ├── dao/               Interfaces DAO com consultas SQL (queries de perfis, medicação, etc.)
-│   │   └── entity/            Entidades e esquemas das tabelas locais
-│   ├── remote/                Comunicação com serviços remotos (Firebase Firestore, Auth e IA)
-│   └── repository/            Repositórios de negócio e AppContainer (orquestrador de dependências)
+├── data/                      Camada de dados e persistência
+│   ├── local/                 Base de dados local Room (SQLite)
+│   │   ├── dao/               Interfaces de acesso a dados (Consultas SQL locais)
+│   │   └── entity/            Entidades e esquemas das tabelas Room
+│   ├── remote/                Serviços de rede (Firebase Firestore, Auth e API Gemini)
+│   └── repository/            Repositórios de negócio e AppContainer (injeção manual)
 │
-├── model/                     Modelos de domínio puros da aplicação (Perfil, Medicamento, Consulta, Nota)
+├── model/                     Modelos de dados puros de domínio (Perfil, Medicamento, Consulta, Nota)
 │
-├── ui/                        Interface de utilizador (Jetpack Compose)
-│   ├── components/            Componentes visuais reutilizáveis (cartões, barras, diálogos e botões)
-│   ├── navigation/            Estrutura de navegação, rotas e barra inferior da aplicação
-│   ├── screens/               Ecrãs principais da aplicação e respetivos ViewModels
-│   │   ├── apontamentos/      Ecrã de notas clínicas, dúvidas médicas e tradutor com IA
-│   │   ├── consultas/         Ecrã de marcação e acompanhamento de consultas/exames
-│   │   ├── definicoes/        Ecrã de opções de conta, acessibilidade e preferências
-│   │   ├── inicio/            Painel principal (dashboard) com o resumo do dia
-│   │   ├── login/             Ecrã de autenticação com Chave Móvel Digital / telemóvel
-│   │   ├── medicacao/         Ecrã de gestão de fármacos, horários e alarmes
-│   │   └── saude/             Ecrã de literacia em saúde, módulos educativos e recompensas
-│   └── theme/                 Configurações de tema Material 3 (paleta de cores, tipografia e formas)
+├── ui/                        Interface gráfica de utilizador (Jetpack Compose)
+│   ├── components/            Componentes visuais modulares (cartões, diálogos, barras, cabeçalhos)
+│   ├── navigation/            Controlo de navegação, rotas e barra inferior
+│   ├── screens/               Ecrãs da aplicação e respetivos ViewModels
+│   │   ├── apontamentos/      Notas do utente e Tradutor Médico com IA
+│   │   ├── consultas/         Gestão e checklist de consultas/exames
+│   │   ├── definicoes/        Acessibilidade, alarmes, sessão CMD e modo cuidador
+│   │   ├── inicio/            Painel inicial (dashboard) com o resumo do dia
+│   │   ├── login/             Autenticação via Chave Móvel Digital / telemóvel
+│   │   ├── medicacao/         Gestão de medicamentos, dosagens e alarmes
+│   │   └── saude/             Literacia clínica, vídeos, questionários e recompensas
+│   └── theme/                 Paleta institucional ULSBE, tipografia e estilos
 │
-├── util/                      Serviços auxiliares e utilitários de sistema
-│                              (alarmes exatos, integração de câmara, criptografia AES e calendário)
+├── util/                      Serviços de baixo nível e utilitários de sistema
+│                              (alarmes exatos Android, câmara, TTS, criptografia AES e calendário)
 │
-└── MainActivity.kt            Ponto de entrada Android da aplicação
+└── MainActivity.kt            Atividade principal e ciclo de vida da aplicação
 ```
 
 ---
 
-## Tecnologias Utilizadas
+## Tecnologias e Bibliotecas
 
-- Linguagem: Kotlin
-- Interface Gráfica: Jetpack Compose + Material 3
-- Arquitetura: MVVM (Model-View-ViewModel) com abordagem Offline-First
-- Base de Dados Local: Room (SQLite)
-- Base de Dados Remota: Google Firebase Firestore
-- Autenticação: Firebase Auth (com fluxo preparado para Chave Móvel Digital)
-- Concorrência e Reatividade: Coroutines e Kotlin Flow
-- Inteligência Artificial: Google Gemini API (para simplificação de linguagem clínica)
+- Linguagem: Kotlin 2.x
+- Interface: Jetpack Compose, Material 3, Accompanist
+- Persistência Local: AndroidX Room SQLite
+- Nuvem: Firebase Firestore, Firebase Authentication
+- Inteligência Artificial: Google Gemini API (modelo generativo para simplificação de texto)
+- Assincronismo: Kotlin Coroutines e StateFlow
+- Integrações de Sistema: Android AlarmManager (Exact Alarms), CalendarProvider, TextToSpeech e SpeechRecognizer
 
 ---
 
 ## Como Executar o Projeto
 
-1. Abrir a pasta do projeto no Android Studio.
-2. Garantir que o JDK 17 (ou o JBR integrado no Android Studio) está selecionado como Gradle JDK.
-3. Aguardar a sincronização dos ficheiros Gradle.
-4. Executar a aplicação num dispositivo físico ou emulador com Android 8.0 (API 26) ou superior.
+1. Abrir a pasta raiz do projeto no Android Studio.
+2. Certificar-se de que o JDK 17 (ou o JBR integrado no Android Studio) está selecionado nas definições de compilação do Gradle.
+3. Aguardar a sincronização inicial das dependências Gradle.
+4. Executar o módulo `app` num dispositivo físico ou emulador com Android 8.0 (API 26) ou superior.
