@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens
 
 import androidx.compose.foundation.background

@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.inicio
 
 import androidx.compose.foundation.background
@@ -52,14 +54,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BannerModoCuidadorInicio
+import pt.ulsbe.pontesaude.ui.components.BarraScrollLateralSuave
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.Marca
@@ -79,14 +82,13 @@ fun EcraInicio(
     perfil: Perfil,
     viewModel: InicioViewModel? = null,
     perfilRepository: PerfilRepository? = null,
-    configuracaoRepository: ConfiguracaoRepository? = null,
     aoSincronizar: (suspend () -> Unit)? = null,
     plataforma: ServicosDispositivo,
     navegarPara: (SeparadorApp) -> Unit,
 ) {
     val uiState = viewModel?.uiState?.collectAsState()?.value
     val temInternet = plataforma.temConexaoInternet()
-    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil ?: perfil else perfil
+    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil else perfil
     val proxima = if (uiState != null && uiState.perfil?.id == perfil.id) {
         uiState.proximaConsulta ?: perfilAtivo.consultas.firstOrNull()
     } else {
@@ -94,9 +96,7 @@ fun EcraInicio(
     }
     var aAtualizarLocal by remember { mutableStateOf(false) }
     val aAtualizar = uiState?.emCarregamento ?: aAtualizarLocal
-    val textoAtualizacao = uiState?.ultimaAtualizacaoFormatada
-        ?: configuracaoRepository?.formatarUltimaAtualizacao()
-        ?: "Hoje às 10:00"
+    val textoAtualizacao = uiState?.ultimaAtualizacaoFormatada ?: "Hoje às 10:00"
 
     val escopo = rememberCoroutineScope()
 
@@ -124,7 +124,7 @@ fun EcraInicio(
         } else {
             aAtualizarLocal = true
             escopo.launch {
-                delay(600)
+                delay(600.milliseconds)
                 aoSincronizar?.invoke()
                 aAtualizarLocal = false
             }
@@ -146,8 +146,10 @@ fun EcraInicio(
                         .background(Brush.verticalGradient(listOf(MarcaMedio, Color(0xFF0F3D9E))))
                         .padding(start = 20.dp, end = 20.dp, top = 54.dp, bottom = 28.dp),
                 ) {
-                    if (perfilRepository?.modoCuidador == true) {
+                    val modoCuidadorAtivo = uiState?.modoCuidadorAtivo ?: perfilRepository?.modoCuidador ?: false
+                    if (modoCuidadorAtivo) {
                         BannerModoCuidadorInicio(
+                            viewModel = viewModel,
                             repositorio = perfilRepository,
                             plataforma = plataforma,
                             aoGerirCuidador = { navegarPara(SeparadorApp.DEFINICOES) },
@@ -266,6 +268,13 @@ fun EcraInicio(
                 }
             }
         }
+
+        BarraScrollLateralSuave(
+            estadoLista = estadoLista,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp, top = 54.dp, bottom = 16.dp),
+        )
     }
 }
 

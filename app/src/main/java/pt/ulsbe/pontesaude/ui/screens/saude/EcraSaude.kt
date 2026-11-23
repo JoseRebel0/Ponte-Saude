@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.saude
 
 import androidx.compose.foundation.BorderStroke
@@ -7,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -59,6 +62,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,9 +78,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.data.repository.SaudeRepository
 import pt.ulsbe.pontesaude.data.repository.calcularNivelSeguranca
@@ -89,6 +93,7 @@ import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.model.TipoModulo
 import pt.ulsbe.pontesaude.model.VoucherResgatado
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
+import pt.ulsbe.pontesaude.ui.components.BarraScrollLateralSuave
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
@@ -111,20 +116,19 @@ fun EcraSaude(
     perfil: Perfil,
     idModuloAberto: String?,
     viewModel: SaudeViewModel? = null,
-    concluidos: List<String>,
+    concluidos: List<String> = emptyList(),
     saudeRepository: SaudeRepository? = null,
     perfilRepository: PerfilRepository? = null,
-    configuracaoRepository: ConfiguracaoRepository? = null,
     plataforma: ServicosDispositivo,
     aoAbrirModulo: (String?) -> Unit,
-    aoAlternarModulo: (String) -> Unit,
+    aoAlternarModulo: (String) -> Unit = {},
     aoNavegar: (SeparadorApp) -> Unit,
 ) {
     val uiState = viewModel?.uiState?.collectAsState()?.value
     LaunchedEffect(perfil.id) {
         viewModel?.recarregar()
     }
-    val modulosFonte = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
+    val modulosFonte = uiState?.modulos ?: emptyList()
     val modulo = modulosFonte.find { it.id == idModuloAberto }
     if (modulo != null) {
         val listaConcluidosEfetiva = uiState?.modulosConcluidos ?: concluidos
@@ -132,7 +136,6 @@ fun EcraSaude(
             modulo = modulo,
             perfil = perfil,
             concluidos = listaConcluidosEfetiva,
-            saudeRepository = saudeRepository,
             viewModel = viewModel,
             plataforma = plataforma,
             aoVoltar = { aoAbrirModulo(null) },
@@ -149,8 +152,9 @@ fun EcraSaude(
     var voucherRecemResgatado by remember { mutableStateOf<VoucherResgatado?>(null) }
     var mensagemNotificacao by remember { mutableStateOf<String?>(null) }
 
-    val tituloEcra = if (perfilRepository?.modoCuidador == true) "Saúde · ${perfil.nome}" else "Saúde"
-    val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
+    val modoCuidadorAtivo = uiState?.modoCuidadorAtivo ?: (perfilRepository?.modoCuidador == true)
+    val tituloEcra = if (modoCuidadorAtivo) "Saúde · ${perfil.nome}" else "Saúde"
+    val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Literacia e apoio"
     val estadoLista = rememberLazyListState()
 
     Column(Modifier.fillMaxSize()) {
@@ -161,8 +165,8 @@ fun EcraSaude(
             onRefresh = {
                 aAtualizar = true
                 escopo.launch {
-                    delay(800) // Transição suave de carregamento
-                    configuracaoRepository?.registarAtualizacao()
+                    delay(800.milliseconds) // Transição suave de carregamento
+                    viewModel?.recarregar()
                     aAtualizar = false
                 }
             },
@@ -173,11 +177,11 @@ fun EcraSaude(
             LazyColumn(
                 state = estadoLista,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
 
-            if (perfilRepository?.modoCuidador == true) {
+            if (modoCuidadorAtivo) {
                 item {
                     Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
@@ -236,9 +240,9 @@ fun EcraSaude(
 
             // PROGRAMA DE LITERACIA & SEGURANÇA (HUD POLIDO E EQUILIBRADO)
             item {
-                val pontosSaldo = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50
-                val vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty()
-                val pontosTotais = uiState?.pontosTotais ?: saudeRepository?.pontosTotais ?: (pontosSaldo + vouchers.sumOf { it.pontosUsados })
+                val pontosSaldo = uiState?.pontosSeguranca ?: 50
+                val vouchers = uiState?.vouchers.orEmpty()
+                val pontosTotais = uiState?.pontosTotais ?: (pontosSaldo + vouchers.sumOf { it.pontosUsados })
                 val infoNivel = calcularNivelSeguranca(pontosTotais)
 
                 Box(Modifier.padding(horizontal = 20.dp)) {
@@ -449,7 +453,7 @@ fun EcraSaude(
                     }
                 }
             }
-            val listaModulos = uiState?.modulos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.modulosSaude ?: emptyList()
+            val listaModulos = uiState?.modulos ?: emptyList()
             items(listaModulos, key = { it.id }) { item ->
                 val concluido = item.id in concluidos
                 Box(Modifier.padding(horizontal = 20.dp)) {
@@ -541,9 +545,9 @@ fun EcraSaude(
                     }
                 }
             }
-            val listaVideos = uiState?.videos.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.videosBiblioteca ?: emptyList()
+            val listaVideos = uiState?.videos ?: emptyList()
             items(listaVideos, key = { it.id }) { video ->
-                val jaVisto = (uiState?.videosAssistidos?.contains(video.id) == true) || (saudeRepository?.videosAssistidos?.contains(video.id) == true)
+                val jaVisto = uiState?.videosAssistidos?.contains(video.id) == true
                 Box(Modifier.padding(horizontal = 20.dp)) {
                     Card(
                     modifier = Modifier
@@ -551,11 +555,7 @@ fun EcraSaude(
                         .clip(RoundedCornerShape(18.dp))
                         .clickable {
                             plataforma.abrirLigacao(video.urlYoutube)
-                            val pts = if (viewModel != null) {
-                                viewModel.verVideo(video.id)
-                            } else {
-                                saudeRepository?.premiarVerVideo(video.id, perfil.id) ?: 0
-                            }
+                            val pts = viewModel?.verVideo(video.id) ?: 0
                             if (pts > 0) {
                                 mensagemNotificacao = "⭐ Parabéns! Ganhou +$pts Pontos por assistir ao vídeo oficial «${video.titulo}»!"
                             }
@@ -656,19 +656,23 @@ fun EcraSaude(
             item { Box(Modifier.padding(horizontal = 20.dp)) { BotaoContacto("Ligar SNS 24 · 808 24 24 24", MarcaMedio) { plataforma.marcarNumero("808242424") } } }
             item { Box(Modifier.padding(horizontal = 20.dp)) { BotaoContacto("Emergência 112", Color(0xFFDC2626)) { plataforma.marcarNumero("112") } } }
         }
+
+        BarraScrollLateralSuave(
+            estadoLista = estadoLista,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp, top = 12.dp, bottom = 16.dp),
+        )
     }
 }
 
     if (mostrarDialogoResgate) {
         DialogoResgateRecompensas(
-            pontosAtuais = uiState?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50,
-            recompensas = uiState?.recompensas.takeUnless { it.isNullOrEmpty() } ?: saudeRepository?.catalogoRecompensas ?: emptyList(),
+            pontosAtuais = uiState?.pontosSeguranca ?: 50,
+            recompensas = uiState?.recompensas ?: emptyList(),
             aoResgatar = { recompensa ->
                 mostrarDialogoResgate = false
-                if (viewModel != null) viewModel.resgatarVoucher(recompensa); val voucher = saudeRepository?.resgatarRecompensa(recompensa)
-                if (voucher != null) {
-                    voucherRecemResgatado = voucher
-                }
+                viewModel?.resgatarVoucher(recompensa)
             },
             aoFechar = { mostrarDialogoResgate = false },
         )
@@ -676,7 +680,7 @@ fun EcraSaude(
 
     if (mostrarDialogoVouchers) {
         DialogoMeusVouchers(
-            vouchers = uiState?.vouchers ?: saudeRepository?.vouchersResgatados.orEmpty(),
+            vouchers = uiState?.vouchers.orEmpty(),
             aoFechar = { mostrarDialogoVouchers = false },
         )
     }
@@ -713,7 +717,6 @@ fun EcraModulo(
     modulo: ModuloSaude,
     perfil: Perfil,
     concluidos: List<String>,
-    saudeRepository: SaudeRepository? = null,
     viewModel: SaudeViewModel? = null,
     plataforma: ServicosDispositivo,
     aoVoltar: () -> Unit,
@@ -721,6 +724,7 @@ fun EcraModulo(
     aoNavegar: (SeparadorApp) -> Unit,
     aoAbrir: (String?) -> Unit,
 ) {
+    val uiStateModulo = viewModel?.uiState?.collectAsState()?.value
     var mensagemPontos by remember { mutableStateOf<String?>(null) }
     val estadoModulo = rememberLazyListState()
 
@@ -756,11 +760,9 @@ fun EcraModulo(
         item {
             Box(Modifier.padding(horizontal = 20.dp)) {
                 BotaoOuvir("Ouvir este módulo (+25 pts)", {
-                    val pts = if (viewModel != null) {
-                        viewModel.ouvirModulo(modulo.id, modulo.fala, plataforma)
-                    } else {
+                    val pts = viewModel?.ouvirModulo(modulo.id, modulo.fala, plataforma) ?: run {
                         plataforma.falar(modulo.fala)
-                        saudeRepository?.premiarOuvirModulo(modulo.id, perfil.id) ?: 0
+                        0
                     }
                     if (pts > 0) {
                         mensagemPontos = "🎉 Parabéns! Ganhou +$pts Pontos de Segurança por ouvir este módulo!"
@@ -771,7 +773,7 @@ fun EcraModulo(
         when (modulo.tipo) {
             TipoModulo.LAVAGEM_MAOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { LavagemMaos(plataforma) } }
             TipoModulo.CIRURGIA -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloCirurgia() } }
-            TipoModulo.QUESTIONARIO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloQuestionario(plataforma) } }
+            TipoModulo.QUESTIONARIO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloQuestionario() } }
             TipoModulo.LEITURA -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloLeitura(plataforma) } }
             TipoModulo.QUEDAS -> item {
                 Box(Modifier.padding(horizontal = 20.dp)) {
@@ -792,24 +794,20 @@ fun EcraModulo(
             }
             TipoModulo.CRIANCAS -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloCriancas(plataforma) } }
             TipoModulo.CONTACTOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloContactos(plataforma) } }
-            TipoModulo.RESUMO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloResumo(concluidos, saudeRepository?.modulosSaude ?: emptyList(), aoAbrir) } }
+            TipoModulo.RESUMO -> item { Box(Modifier.padding(horizontal = 20.dp)) { ModuloResumo(concluidos, uiStateModulo?.modulos ?: emptyList(), aoAbrir) } }
             TipoModulo.PERGUNTAS -> item { Box(Modifier.padding(horizontal = 20.dp)) { Button({ aoNavegar(SeparadorApp.NOTAS) }, Modifier.fillMaxWidth()) { Text("Preparar perguntas para o médico") } } }
             TipoModulo.MEDICAMENTOS -> item { Box(Modifier.padding(horizontal = 20.dp)) { Button({ aoNavegar(SeparadorApp.MEDICACAO) }, Modifier.fillMaxWidth()) { Text("Abrir a minha lista") } } }
             TipoModulo.INFO -> Unit
         }
         item {
-            val uiStateModulo = viewModel?.uiState?.collectAsState()?.value
             val concluidosEfetivos = uiStateModulo?.modulosConcluidos ?: concluidos
-            val feito = modulo.id in concluidosEfetivos || (saudeRepository?.modulosConcluidos?.contains(modulo.id) == true)
+            val feito = modulo.id in concluidosEfetivos
             Box(Modifier.padding(horizontal = 20.dp)) {
                 Button(
                     onClick = {
-                        val pts = if (viewModel != null) {
-                            viewModel.alternarConclusaoModulo(modulo.id)
-                        } else {
-                            val p = saudeRepository?.alternarModuloComPontos(modulo.id, perfil.id) ?: 0
+                        val pts = viewModel?.alternarConclusaoModulo(modulo.id) ?: run {
                             aoAlternar(modulo.id)
-                            p
+                            0
                         }
                         if (pts > 0) {
                             mensagemPontos = "⭐ Módulo concluído! Ganhou +$pts Pontos de Segurança!"
@@ -837,7 +835,7 @@ fun EcraModulo(
                     Text(mensagemPontos.orEmpty())
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Saldo atual: ${viewModel?.uiState?.value?.pontosSeguranca ?: saudeRepository?.pontosSeguranca ?: 50} pontos",
+                        "Saldo atual: ${viewModel?.uiState?.value?.pontosSeguranca ?: 50} pontos",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MarcaMedio,
@@ -894,11 +892,11 @@ private val passosLavagem = listOf(
 
 @Composable
 private fun LavagemMaos(plataforma: ServicosDispositivo) {
-    var passo by remember { mutableStateOf(0) }
+    var passo by remember { mutableIntStateOf(0) }
     var aReproduzir by remember { mutableStateOf(false) }
     LaunchedEffect(aReproduzir, passo) {
         if (aReproduzir) {
-            delay(3500)
+            delay(3500.milliseconds)
             if (passo < passosLavagem.lastIndex) passo++ else aReproduzir = false
         }
     }
@@ -963,7 +961,7 @@ private val itensQuiz = listOf(
 )
 
 @Composable
-private fun ModuloQuestionario(plataforma: ServicosDispositivo) {
+private fun ModuloQuestionario() {
     val respostas = remember { mutableStateMapOf<Int, Boolean>() }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         itensQuiz.forEachIndexed { indice, item ->

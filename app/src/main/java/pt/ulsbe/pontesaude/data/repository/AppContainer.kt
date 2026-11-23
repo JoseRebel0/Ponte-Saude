@@ -53,7 +53,13 @@ class AppContainer(context: Context) {
     val medicacao = MedicacaoRepository(dbLocal, clienteFirestore, integracaoIa, scope, estaOnline = { estaOnline })
     val consultas = ConsultaRepository(dbLocal, clienteFirestore, scope, estaOnline = { estaOnline })
     val saude = SaudeRepository(context, dbLocal, clienteFirestore, integracaoIa, scope, estaOnline = { estaOnline })
-    val notas = NotaRepository(dbLocal, clienteFirestore, scope, estaOnline = { estaOnline })
+    val notas = NotaRepository(
+        dbLocal,
+        clienteFirestore,
+        scope,
+        estaOnline = { estaOnline },
+        aoAtualizarNotasPerfil = { id, n -> perfil.atualizarNotasPerfil(id, n) },
+    )
 
     val perfilAtivoCompleto: Perfil
         get() {
@@ -228,13 +234,21 @@ class AppContainer(context: Context) {
                     }
                     consultas.carregarDadosLocais(p.id)
 
-                    val notasLocais = dbLocal.notaDao().obterPorPerfil(p.id).map { it.paraModelo() }
-                    val notasFinais = (notasLocais + p.notas).distinctBy { it.texto.trim() }
+                    val locaisEntidades = dbLocal.notaDao().obterPorPerfil(p.id)
+                    val pendentes = locaisEntidades.filter { it.pendenteSincronizacao }.map { it.paraModelo() }
+                    val notasFinais = if (pendentes.isNotEmpty()) {
+                        val unificadas = (p.notas + pendentes).distinctBy { it.texto.trim() }
+                        clienteFirestore.atualizarNotas(p.id, unificadas)
+                        unificadas
+                    } else {
+                        p.notas
+                    }
                     dbLocal.notaDao().apagarPorPerfil(p.id)
                     for (n in notasFinais) {
                         dbLocal.notaDao().inserir(pt.ulsbe.pontesaude.data.local.entity.NotaEntity(0, p.id, n.texto, n.autor, false))
                     }
                     notas.carregarDadosLocais(p.id)
+                    perfil.atualizarNotasPerfil(p.id, notasFinais)
                 }
             }
             versaoSincronizacao++

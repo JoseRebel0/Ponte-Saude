@@ -21,6 +21,7 @@ class NotaRepository(
     private val clienteFirestore: ClienteFirestore,
     private val scope: CoroutineScope,
     private val estaOnline: () -> Boolean,
+    private val aoAtualizarNotasPerfil: ((String, List<Nota>) -> Unit)? = null,
 ) {
     private val listaNotas = mutableStateMapOf<String, List<Nota>>()
     private val listaProdutos = mutableStateMapOf<String, List<String>>()
@@ -31,14 +32,22 @@ class NotaRepository(
     }
 
     fun notas(perfil: Perfil): List<Nota> {
-        val emMemoria = listaNotas[perfil.id]
-        if (!emMemoria.isNullOrEmpty()) return emMemoria
+        if (listaNotas.containsKey(perfil.id)) {
+            return listaNotas[perfil.id].orEmpty()
+        }
         val doRoom = dbLocal.notaDao().obterPorPerfil(perfil.id).map { it.paraModelo() }
         if (doRoom.isNotEmpty()) {
             listaNotas[perfil.id] = doRoom
             return doRoom
         }
-        return perfil.notas
+        val iniciais = perfil.notas
+        listaNotas[perfil.id] = iniciais
+        if (iniciais.isNotEmpty()) {
+            iniciais.forEach {
+                dbLocal.notaDao().inserir(NotaEntity(0, perfil.id, it.texto, it.autor, false))
+            }
+        }
+        return iniciais
     }
 
     fun produtos(perfil: Perfil): List<String> =
@@ -46,6 +55,7 @@ class NotaRepository(
 
     fun atualizarNotasEmMemoria(idPerfil: String, notas: List<Nota>) {
         listaNotas[idPerfil] = notas
+        aoAtualizarNotasPerfil?.invoke(idPerfil, notas)
     }
 
     fun atualizarProdutosEmMemoria(idPerfil: String, prods: List<String>) {
@@ -55,6 +65,7 @@ class NotaRepository(
     fun adicionarNota(perfil: Perfil, nota: Nota) {
         val atuais = notas(perfil) + nota
         listaNotas[perfil.id] = atuais
+        aoAtualizarNotasPerfil?.invoke(perfil.id, atuais)
 
         val online = estaOnline()
         dbLocal.notaDao().inserir(NotaEntity(0, perfil.id, nota.texto, nota.autor, !online))
@@ -73,6 +84,7 @@ class NotaRepository(
         if (indice in atuais.indices) {
             atuais.removeAt(indice)
             listaNotas[perfil.id] = atuais
+            aoAtualizarNotasPerfil?.invoke(perfil.id, atuais)
 
             val online = estaOnline()
             dbLocal.notaDao().apagarPorPerfil(perfil.id)
@@ -87,6 +99,14 @@ class NotaRepository(
                     }
                 }
             }
+        }
+    }
+
+    fun apagarNota(perfil: Perfil, nota: Nota) {
+        val atuais = notas(perfil).toMutableList()
+        val idx = atuais.indexOf(nota)
+        if (idx >= 0) {
+            apagarNota(perfil, idx)
         }
     }
 

@@ -1,10 +1,6 @@
 package pt.ulsbe.pontesaude.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,16 +18,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Message
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.FamilyRestroom
-import androidx.compose.material.icons.rounded.Message
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonAddAlt1
 import androidx.compose.material.icons.rounded.PhoneAndroid
-import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.SupervisorAccount
 import androidx.compose.material.icons.rounded.SwitchAccount
@@ -51,6 +44,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Perfil
+import pt.ulsbe.pontesaude.ui.screens.definicoes.DefinicoesViewModel
+import pt.ulsbe.pontesaude.ui.screens.inicio.InicioViewModel
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
@@ -83,7 +79,8 @@ import pt.ulsbe.pontesaude.ui.theme.Superficie2
  */
 @Composable
 fun DialogoAdicionarPessoaCuidada(
-    repositorio: PerfilRepository,
+    viewModel: DefinicoesViewModel? = null,
+    repositorio: PerfilRepository? = null,
     plataforma: ServicosDispositivo?,
     aoFechar: () -> Unit,
     aoPessoaAdicionada: (Perfil) -> Unit,
@@ -100,9 +97,12 @@ fun DialogoAdicionarPessoaCuidada(
     var codigoSmsGerado by remember { mutableStateOf("749218") }
     var perfilCriado by remember { mutableStateOf<Perfil?>(null) }
 
-    val perfisDisponiveis = remember(repositorio.todosOsPerfis.size, repositorio.pessoasCuidadas.size) {
-        val idsCuidados = repositorio.pessoasCuidadas.map { it.id }.toSet()
-        repositorio.todosOsPerfis.filter { it.id != repositorio.utenteSessaoId && it.id !in idsCuidados }
+    val todos = viewModel?.uiState?.value?.todosOsPerfis ?: repositorio?.todosOsPerfis.orEmpty()
+    val cuidados = viewModel?.uiState?.value?.pessoasCuidadas ?: repositorio?.pessoasCuidadas.orEmpty()
+    val sessaoId = viewModel?.uiState?.value?.perfilSessao?.id ?: repositorio?.utenteSessaoId.orEmpty()
+    val perfisDisponiveis = remember(todos.size, cuidados.size) {
+        val idsCuidados = cuidados.map { it.id }.toSet()
+        todos.filter { it.id != sessaoId && it.id !in idsCuidados }
     }
 
     AlertDialog(
@@ -330,7 +330,11 @@ fun DialogoAdicionarPessoaCuidada(
 
                                         Button(
                                             onClick = {
-                                                repositorio.associarPerfilCuidado(p.id)
+                                                if (viewModel != null) {
+                                                    viewModel.associarPerfilCuidado(p.id)
+                                                } else {
+                                                    repositorio?.associarPerfilCuidado(p.id)
+                                                }
                                                 perfilCriado = p
                                                 passo = 3
                                             },
@@ -510,12 +514,28 @@ fun DialogoAdicionarPessoaCuidada(
                                             return@Button
                                         }
 
-                                        val novo = repositorio.adicionarPessoaCuidada(
-                                            nome = nome,
-                                            relacao = "Utente",
-                                            telemovel = telemovel,
-                                            numeroUtente = numeroUtente,
-                                        )
+                                        val novo = if (viewModel != null) {
+                                            viewModel.adicionarPessoaCuidada(
+                                                nome = nome,
+                                                relacao = "Utente",
+                                                numeroUtente = numeroUtente,
+                                                nif = telemovel,
+                                            )
+                                        } else {
+                                            repositorio?.adicionarPessoaCuidada(
+                                                nome = nome,
+                                                relacao = "Utente",
+                                                telemovel = telemovel,
+                                                numeroUtente = numeroUtente,
+                                            ) ?: Perfil(
+                                                id = "temp_${System.currentTimeMillis()}",
+                                                nome = nome,
+                                                nomeCurto = nome,
+                                                relacao = "Utente",
+                                                iniciais = nome.take(2).uppercase(),
+                                                numeroUtente = numeroUtente,
+                                            )
+                                        }
                                         perfilCriado = novo
                                         passo = 3
                                     },
@@ -553,14 +573,25 @@ fun DialogoAdicionarPessoaCuidada(
  */
 @Composable
 fun SecaoModoCuidador(
-    repositorio: PerfilRepository,
-    plataforma: ServicosDispositivo?,
+    viewModel: DefinicoesViewModel? = null,
+    repositorio: PerfilRepository? = null,
+    plataforma: ServicosDispositivo? = null,
     modifier: Modifier = Modifier,
 ) {
     var mostrarDialogoAdicionar by remember { mutableStateOf(false) }
     var mostrarDialogoTrocar by remember { mutableStateOf(false) }
-    val perfilAtivo = repositorio.perfilAtivo
-    val perfilSessao = repositorio.perfilSessao
+    val uiState = viewModel?.uiState?.collectAsState()?.value
+    val perfilAtivo = uiState?.perfil ?: repositorio?.perfilAtivo ?: Perfil(
+        id = "0",
+        nome = "Utilizador",
+        nomeCurto = "Utilizador",
+        relacao = "Utente",
+        iniciais = "U",
+    )
+    val perfilSessao = uiState?.perfilSessao ?: repositorio?.perfilSessao ?: perfilAtivo
+    val modoCuidador = uiState?.modoCuidador ?: repositorio?.modoCuidador ?: false
+    val pessoasCuidadas = uiState?.pessoasCuidadas ?: repositorio?.pessoasCuidadas.orEmpty()
+    val todosOsPerfis = uiState?.todosOsPerfis ?: repositorio?.todosOsPerfis.orEmpty()
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // LINHA MESTRE COM TOGGLE
@@ -573,13 +604,13 @@ fun SecaoModoCuidador(
                 Box(
                     modifier = Modifier
                         .size(42.dp)
-                        .background(if (repositorio.modoCuidador) Color(0xFFDCFCE7) else Superficie2, CircleShape),
+                        .background(if (modoCuidador) Color(0xFFDCFCE7) else Superficie2, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         Icons.Rounded.SupervisorAccount,
                         contentDescription = null,
-                        tint = if (repositorio.modoCuidador) Color(0xFF15803D) else Atenuado,
+                        tint = if (modoCuidador) Color(0xFF15803D) else Atenuado,
                         modifier = Modifier.size(22.dp),
                     )
                 }
@@ -599,9 +630,13 @@ fun SecaoModoCuidador(
             }
 
             Switch(
-                checked = repositorio.modoCuidador,
+                checked = modoCuidador,
                 onCheckedChange = { ativo ->
-                    repositorio.atualizarModoCuidador(ativo)
+                    if (viewModel != null) {
+                        viewModel.atualizarModoCuidador(ativo)
+                    } else {
+                        repositorio?.atualizarModoCuidador(ativo)
+                    }
                 },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
@@ -611,7 +646,7 @@ fun SecaoModoCuidador(
         }
 
         // CONTEÚDO QUANDO MODO CUIDADOR ESTÁ ATIVO
-        if (repositorio.modoCuidador) {
+        if (modoCuidador) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -624,7 +659,7 @@ fun SecaoModoCuidador(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (repositorio.pessoasCuidadas.isEmpty()) {
+                    if (pessoasCuidadas.isEmpty()) {
                         Text(
                             text = "Ainda não tem utentes associados",
                             style = MaterialTheme.typography.titleSmall,
@@ -648,7 +683,7 @@ fun SecaoModoCuidador(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF15803D),
                             )
-                            if (repositorio.pessoasCuidadas.size > 1) {
+                            if (pessoasCuidadas.size > 1) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
@@ -715,7 +750,7 @@ fun SecaoModoCuidador(
                         Icon(Icons.Rounded.PersonAddAlt1, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            text = if (repositorio.pessoasCuidadas.isEmpty()) "Associar Primeiro Utente" else "Associar Novo Utente",
+                            text = if (pessoasCuidadas.isEmpty()) "Associar Primeiro Utente" else "Associar Novo Utente",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                         )
@@ -753,13 +788,13 @@ fun SecaoModoCuidador(
                         )
                     }
                     Text(
-                        text = "${repositorio.pessoasCuidadas.size} utente(s)",
+                        text = "${pessoasCuidadas.size} utente(s)",
                         style = MaterialTheme.typography.labelSmall,
                         color = Atenuado,
                     )
                 }
 
-                if (repositorio.pessoasCuidadas.isEmpty()) {
+                if (pessoasCuidadas.isEmpty()) {
                     Text(
                         text = "Não está a cuidar de nenhum perfil atualmente. Pode associar utentes existentes ou criar novos para gerir a sua medicação e consultas.",
                         style = MaterialTheme.typography.bodySmall,
@@ -774,7 +809,7 @@ fun SecaoModoCuidador(
                         Text("Associar utente a cuidar", fontSize = 12.sp, color = MarcaMedio, fontWeight = FontWeight.Bold)
                     }
                 } else {
-                    repositorio.pessoasCuidadas.forEach { p ->
+                    pessoasCuidadas.forEach { p ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -800,7 +835,13 @@ fun SecaoModoCuidador(
                                 }
                             }
                             IconButton(
-                                onClick = { repositorio.desassociarPerfilCuidado(p.id) },
+                                onClick = {
+                                    if (viewModel != null) {
+                                        viewModel.desassociarPerfilCuidado(p.id)
+                                    } else {
+                                        repositorio?.desassociarPerfilCuidado(p.id)
+                                    }
+                                },
                                 modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(Icons.Rounded.DeleteOutline, contentDescription = "Desassociar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
@@ -814,7 +855,7 @@ fun SecaoModoCuidador(
         // ==========================================
         // 2. CUIDADORES QUE CUIDAM DE MIM (cuidadoresIds)
         // ==========================================
-        val cuidadoresDeMim = repositorio.todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds && it.id != perfilSessao.id }
+        val cuidadoresDeMim = todosOsPerfis.filter { it.id in perfilSessao.cuidadoresIds && it.id != perfilSessao.id }
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -885,6 +926,7 @@ fun SecaoModoCuidador(
 
     if (mostrarDialogoAdicionar) {
         DialogoAdicionarPessoaCuidada(
+            viewModel = viewModel,
             repositorio = repositorio,
             plataforma = plataforma,
             aoFechar = { mostrarDialogoAdicionar = false },
@@ -896,6 +938,7 @@ fun SecaoModoCuidador(
 
     if (mostrarDialogoTrocar) {
         DialogoTrocarContaCuidador(
+            viewModel = viewModel,
             repositorio = repositorio,
             aoFechar = { mostrarDialogoTrocar = false },
             aoGerir = { mostrarDialogoTrocar = false },
@@ -908,13 +951,18 @@ fun SecaoModoCuidador(
  */
 @Composable
 fun BannerModoCuidadorInicio(
-    repositorio: PerfilRepository,
-    plataforma: ServicosDispositivo?,
+    viewModel: InicioViewModel? = null,
+    repositorio: PerfilRepository? = null,
+    plataforma: ServicosDispositivo? = null,
     aoGerirCuidador: () -> Unit,
 ) {
-    if (!repositorio.modoCuidador || repositorio.pessoasCuidadas.isEmpty()) return
+    val uiState = viewModel?.uiState?.collectAsState()?.value
+    val modoAtivo = uiState?.modoCuidadorAtivo ?: repositorio?.modoCuidador ?: false
+    val pessoas = uiState?.pessoasCuidadas ?: repositorio?.pessoasCuidadas ?: emptyList()
+    val pessoaAtual = uiState?.perfil ?: repositorio?.perfilAtivo
 
-    val pessoaAtual = repositorio.perfilAtivo
+    if (!modoAtivo || pessoas.isEmpty() || pessoaAtual == null) return
+
     var mostrarTrocaRapida by remember { mutableStateOf(false) }
 
     Row(
@@ -986,86 +1034,10 @@ fun BannerModoCuidadorInicio(
 
     if (mostrarTrocaRapida) {
         DialogoTrocarContaCuidador(
+            viewModelInicio = viewModel,
             repositorio = repositorio,
             aoFechar = { mostrarTrocaRapida = false },
             aoGerir = aoGerirCuidador,
-        )
-    }
-}
-
-/**
- * Barra superior persistente e elegante que mostra a conta ativa quando o Modo Cuidador está ligado.
- * Dá a sensação clara de que mudou de conta em toda a aplicação.
- */
-@Composable
-fun BarraModoCuidadorTopo(
-    repositorio: PerfilRepository,
-    aoGerir: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (!repositorio.modoCuidador || repositorio.pessoasCuidadas.isEmpty()) return
-
-    val pessoaAtual = repositorio.perfilAtivo
-    var mostrarTroca by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color(0xFF0F766E))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(Color.White.copy(alpha = 0.2f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = pessoaAtual.iniciais,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = "CONTA ATIVA: ${pessoaAtual.nome}",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
-                Text(
-                    text = "Nº SNS: ${pessoaAtual.numeroUtente} · ${pessoaAtual.idadeFormatada}",
-                    color = Color.White.copy(alpha = 0.85f),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    maxLines = 1,
-                )
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color.White.copy(alpha = 0.2f))
-                    .clickable { mostrarTroca = true }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text("Mudar ▾", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-
-    if (mostrarTroca) {
-        DialogoTrocarContaCuidador(
-            repositorio = repositorio,
-            aoFechar = { mostrarTroca = false },
-            aoGerir = aoGerir,
         )
     }
 }
@@ -1075,10 +1047,41 @@ fun BarraModoCuidadorTopo(
  */
 @Composable
 fun DialogoTrocarContaCuidador(
-    repositorio: PerfilRepository,
+    viewModel: DefinicoesViewModel? = null,
+    viewModelInicio: InicioViewModel? = null,
+    repositorio: PerfilRepository? = null,
     aoFechar: () -> Unit,
     aoGerir: () -> Unit,
 ) {
+    val defState = viewModel?.uiState?.collectAsState()?.value
+    val iniState = viewModelInicio?.uiState?.collectAsState()?.value
+
+    val perfilPessoal = defState?.perfilSessao
+        ?: iniState?.perfilSessao
+        ?: repositorio?.perfilSessao
+        ?: Perfil(
+            id = "0",
+            nome = "Utilizador",
+            nomeCurto = "Utilizador",
+            relacao = "Utente",
+            iniciais = "U",
+        )
+
+    val modoCuidador = defState?.modoCuidador
+        ?: iniState?.modoCuidadorAtivo
+        ?: repositorio?.modoCuidador
+        ?: false
+
+    val pessoasCuidadas = defState?.pessoasCuidadas
+        ?: iniState?.pessoasCuidadas
+        ?: repositorio?.pessoasCuidadas
+        ?: emptyList()
+
+    val indicePerfilCuidado = defState?.indicePerfilCuidado
+        ?: iniState?.indicePerfilCuidado
+        ?: repositorio?.indicePerfilCuidado
+        ?: 0
+
     AlertDialog(
         onDismissRequest = aoFechar,
         title = {
@@ -1097,14 +1100,15 @@ fun DialogoTrocarContaCuidador(
                 )
 
                 // 1. CONTA PESSOAL DO UTILIZADOR
-                val perfilPessoal = repositorio.perfilSessao
-                val pessoalAtivo = !repositorio.modoCuidador
+                val pessoalAtivo = !modoCuidador
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
-                            repositorio.atualizarModoCuidador(false)
+                            viewModel?.atualizarModoCuidador(false)
+                                ?: viewModelInicio?.atualizarModoCuidador(false)
+                                ?: repositorio?.atualizarModoCuidador(false)
                             aoFechar()
                         },
                     colors = CardDefaults.cardColors(
@@ -1147,7 +1151,7 @@ fun DialogoTrocarContaCuidador(
                 )
 
                 // 2. LISTA DE CONTAS DE PESSOAS CUIDADAS
-                if (repositorio.pessoasCuidadas.isEmpty()) {
+                if (pessoasCuidadas.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1162,17 +1166,21 @@ fun DialogoTrocarContaCuidador(
                         )
                     }
                 } else {
-                    repositorio.pessoasCuidadas.forEachIndexed { idx, p ->
-                        val atual = repositorio.modoCuidador && repositorio.indicePerfilCuidado == idx
+                    pessoasCuidadas.forEachIndexed { idx, p ->
+                        val atual = modoCuidador && indicePerfilCuidado == idx
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
-                                    if (!repositorio.modoCuidador) {
-                                        repositorio.atualizarModoCuidador(true)
+                                    if (!modoCuidador) {
+                                        viewModel?.atualizarModoCuidador(true)
+                                            ?: viewModelInicio?.atualizarModoCuidador(true)
+                                            ?: repositorio?.atualizarModoCuidador(true)
                                     }
-                                    repositorio.definirPerfilCuidado(idx)
+                                    viewModel?.definirPerfilCuidado(idx)
+                                        ?: viewModelInicio?.definirPerfilCuidado(idx)
+                                        ?: repositorio?.definirPerfilCuidado(idx)
                                     aoFechar()
                                 },
                             colors = CardDefaults.cardColors(

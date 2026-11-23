@@ -123,28 +123,6 @@ object ProcessadorImagem {
     }.getOrNull()
 
     /**
-     * Processa um [Bitmap] diretamente (ex: vindo de preview de câmara).
-     */
-    fun processarBitmapParaBase64(
-        context: Context?,
-        bitmap: Bitmap,
-        idMedicamento: Long? = null,
-        maxDimensao: Int = MAX_DIMENSAO_PADRAO,
-        qualidade: Int = QUALIDADE_COMPRESSAO_JPEG,
-    ): String {
-        val bitmapFinal = redimensionarSeNecessario(bitmap, maxDimensao)
-        val streamSaida = ByteArrayOutputStream()
-        bitmapFinal.compress(Bitmap.CompressFormat.JPEG, qualidade, streamSaida)
-        val bytesJpeg = streamSaida.toByteArray()
-
-        if (context != null && idMedicamento != null) {
-            guardarNoArmazenamentoLocal(context, idMedicamento, bytesJpeg)
-        }
-
-        return Base64.encodeToString(bytesJpeg, Base64.NO_WRAP)
-    }
-
-    /**
      * Descodifica uma string Base64 para [Bitmap].
      * Se falhar ou estiver em branco, tenta carregar o ficheiro guardado localmente no dispositivo.
      */

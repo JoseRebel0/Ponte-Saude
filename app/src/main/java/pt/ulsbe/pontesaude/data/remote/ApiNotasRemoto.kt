@@ -20,16 +20,18 @@ class ApiNotasRemoto(
     suspend fun atualizarNotas(idPerfil: String, notas: List<Nota>) = withContext(Dispatchers.IO) {
         val colNotas = db.collection("perfis").document(idPerfil).collection("notas")
         val existentes = colNotas.get().await()
+        val batch = db.batch()
         for (doc in existentes.documents) {
-            doc.reference.delete().await()
+            batch.delete(doc.reference)
         }
         for ((indice, nota) in notas.withIndex()) {
             val dto = NotaDtoRemoto(
                 texto = nota.texto,
                 autor = nota.autor,
             )
-            colNotas.document("nota_${indice + 1}").set(dto).await()
+            batch.set(colNotas.document("nota_${indice + 1}"), dto)
         }
+        batch.commit().await()
     }
 
     /**

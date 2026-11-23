@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.util
 
 import android.Manifest
@@ -10,7 +12,6 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -27,6 +28,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import pt.ulsbe.pontesaude.MainActivity
 import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.data.local.BaseDadosLocal
@@ -124,7 +127,7 @@ class ServicosDispositivo(context: Context?) {
     }
 
     private fun criarCanaisNotificacoes() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && gestorNotificacoes != null) {
+        if (gestorNotificacoes != null) {
             val canalMed = NotificationChannel(
                 CANAL_MEDICACAO,
                 "Lembretes de Medicação",
@@ -223,34 +226,6 @@ class ServicosDispositivo(context: Context?) {
         }
     }
 
-    fun enviarNotificacaoConsulta(titulo: String, data: String, local: String): Boolean {
-        val ctx = contextoApp ?: return false
-        return runCatching {
-            val notificacao = NotificationCompat.Builder(ctx, CANAL_CONSULTAS)
-                .setSmallIcon(R.drawable.ic_logo)
-                .setContentTitle("Lembrete de Consulta: $titulo")
-                .setContentText("$data no $local. Verifique as recomendações de jejum e medicação.")
-                .setStyle(NotificationCompat.BigTextStyle().bigText("$data no $local. Verifique as recomendações de jejum e medicação."))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-            gestorNotificacoes?.notify(3001, notificacao)
-            true
-        }.getOrElse {
-            runCatching {
-                val notificacao = NotificationCompat.Builder(ctx, CANAL_CONSULTAS)
-                    .setSmallIcon(android.R.drawable.ic_menu_my_calendar)
-                    .setContentTitle("Lembrete de Consulta: $titulo")
-                    .setContentText("$data no $local.")
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setAutoCancel(true)
-                    .build()
-                gestorNotificacoes?.notify(3001, notificacao)
-                true
-            }.getOrDefault(false)
-        }
-    }
-
     fun enviarNotificacaoChecklist(tituloConsulta: String, itensChecklist: String): Boolean {
         val ctx = contextoApp ?: return false
         return runCatching {
@@ -323,23 +298,28 @@ class ServicosDispositivo(context: Context?) {
 
             // Prioriza setAlarmClock para que o sistema Android ative o ícone de despertador
             // na barra de estado e mostre o alarme no ecrã de bloqueio
-            runCatching {
-                val alarmClockInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent)
-                alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-            }.onFailure {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        cal.timeInMillis,
-                        pendingIntent,
-                    )
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        val alarmClockInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent)
+                        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+                    } else {
+                        alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            cal.timeInMillis,
+                            pendingIntent,
+                        )
+                    }
                 } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        cal.timeInMillis,
-                        pendingIntent,
-                    )
+                    val alarmClockInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent)
+                    alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
                 }
+            } catch (e: SecurityException) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    cal.timeInMillis,
+                    pendingIntent,
+                )
             }
         }
     }
@@ -347,7 +327,7 @@ class ServicosDispositivo(context: Context?) {
     /**
      * Cancela o alarme no AlarmManager, descarta a notificação e remove do relógio nativo se aplicável.
      */
-    fun cancelarAlarmeMedicacao(id: Long, rotuloRelogio: String? = null) {
+    fun cancelarAlarmeMedicacao(id: Long) {
         val ctx = contextoApp ?: return
         runCatching {
             val alarmManager = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
@@ -369,21 +349,6 @@ class ServicosDispositivo(context: Context?) {
     }
 
     /**
-     * Agenda múltiplos alarmes para a lista de medicamentos ativos.
-     */
-    fun agendarMultiplosAlarmes(medicamentos: List<Medicamento>) {
-        medicamentos.filter { it.ativo }.forEach { med ->
-            med.listaHorarios.forEach { horario ->
-                val partes = horario.trim().split(":")
-                val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
-                val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
-                agendarAlarmeMedicacao(med.id, med.nome, med.finalidade, h, m)
-                definirAlarmeRelogio(h, m, "Tomar ${med.nome}")
-            }
-        }
-    }
-
-    /**
      * Cancela todos os alarmes programados para a lista de medicamentos.
      */
     fun cancelarTodosOsAlarmes(medicamentos: List<Medicamento>) {
@@ -399,39 +364,6 @@ class ServicosDispositivo(context: Context?) {
     fun cancelarTodasNotificacoes() {
         runCatching {
             gestorNotificacoes?.cancelAll()
-        }
-    }
-
-    /**
-     * Tenta dispensar/desativar todos os alarmes no relógio nativo do sistema Android.
-     */
-    fun tentarDesativarTodosAlarmesRelogio() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            runCatching {
-                val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
-                    putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_ALL)
-                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                contextoApp?.startActivity(intent)
-            }
-        }
-    }
-
-    /**
-     * Tenta dispensar/desativar um alarme no relógio nativo do sistema Android.
-     */
-    fun tentarDesativarAlarmeRelogio(mensagem: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            runCatching {
-                val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
-                    putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
-                    putExtra(AlarmClock.EXTRA_MESSAGE, mensagem)
-                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                contextoApp?.startActivity(intent)
-            }
         }
     }
 
@@ -545,7 +477,7 @@ class ServicosDispositivo(context: Context?) {
             }
 
             if (!jaExiste) {
-                val valores = android.content.ContentValues().apply {
+                val valores = ContentValues().apply {
                     put(CalendarContract.Events.CALENDAR_ID, idCalendario)
                     put(CalendarContract.Events.TITLE, tituloCompleto)
                     put(CalendarContract.Events.DESCRIPTION, descricao)
@@ -557,7 +489,7 @@ class ServicosDispositivo(context: Context?) {
                 }
                 val uriInserido = ctx.contentResolver.insert(uriEventos, valores)
                 uriInserido?.lastPathSegment?.toLongOrNull()?.let { eventoId ->
-                    val valoresLembrete = android.content.ContentValues().apply {
+                    val valoresLembrete = ContentValues().apply {
                         put(CalendarContract.Reminders.EVENT_ID, eventoId)
                         put(CalendarContract.Reminders.MINUTES, 24 * 60)
                         put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
@@ -670,10 +602,6 @@ class ServicosDispositivo(context: Context?) {
         falaPendente = null
     }
 
-    fun pararFala() {
-        parar()
-    }
-
     fun ligar112() {
         marcarNumero("112")
     }
@@ -686,7 +614,7 @@ class ServicosDispositivo(context: Context?) {
         contextoApp?.let { ctx ->
             runCatching {
                 ctx.startActivity(
-                    Intent(Intent.ACTION_DIAL, Uri.parse("tel:$numero")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    Intent(Intent.ACTION_DIAL, "tel:$numero".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
         }
@@ -714,7 +642,7 @@ class ServicosDispositivo(context: Context?) {
     fun abrirLigacao(url: String) {
         contextoApp?.let { ctx ->
             runCatching {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 ctx.startActivity(intent)
@@ -729,14 +657,9 @@ class ServicosDispositivo(context: Context?) {
         val ctx = contextoApp ?: return false
         return runCatching {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val rede = cm.activeNetwork ?: return false
-                val cap = cm.getNetworkCapabilities(rede) ?: return false
-                cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            } else {
-                @Suppress("DEPRECATION")
-                cm.activeNetworkInfo?.isConnectedOrConnecting == true
-            }
+            val rede = cm.activeNetwork ?: return false
+            val cap = cm.getNetworkCapabilities(rede) ?: return false
+            cap.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
         }.getOrDefault(false)
     }
 
@@ -761,7 +684,7 @@ class ServicosDispositivo(context: Context?) {
             val paint = Paint().apply { isAntiAlias = true }
 
             // 1. Cabeçalho ULSBE (Barra Azul)
-            paint.color = AndroidColor.parseColor("#1D5BD8")
+            paint.color = "#1D5BD8".toColorInt()
             canvas.drawRect(0f, 0f, largura.toFloat(), 80f, paint)
 
             paint.color = AndroidColor.WHITE
@@ -779,39 +702,39 @@ class ServicosDispositivo(context: Context?) {
 
             // 2. Caixa de Identificação do Utente
             var yAtual = 100f
-            paint.color = AndroidColor.parseColor("#F1F5F9")
+            paint.color = "#F1F5F9".toColorInt()
             canvas.drawRoundRect(24f, yAtual, largura - 24f, yAtual + 72f, 10f, 10f, paint)
 
-            paint.color = AndroidColor.parseColor("#0F172A")
+            paint.color = "#0F172A".toColorInt()
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 11f
             canvas.drawText("Utente: ${perfil.nome}", 36f, yAtual + 20f, paint)
 
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             paint.textSize = 10f
-            paint.color = AndroidColor.parseColor("#334155")
+            paint.color = "#334155".toColorInt()
             canvas.drawText("Nº Nacional de Saúde (SNS): ${perfil.numeroUtente}    |    Tipo Sanguíneo: ${perfil.tipoSanguineo}", 36f, yAtual + 38f, paint)
             canvas.drawText("Alergias registadas: ${perfil.alergias}", 36f, yAtual + 54f, paint)
 
             val formatoData = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
             val dataStr = formatoData.format(Date())
             paint.textSize = 9f
-            paint.color = AndroidColor.parseColor("#64748B")
+            paint.color = "#64748B".toColorInt()
             canvas.drawText("Emitido em: $dataStr", largura - 180f, yAtual + 20f, paint)
 
             // 3. Título da Secção de Medicação
             yAtual += 92f
-            paint.color = AndroidColor.parseColor("#1D5BD8")
+            paint.color = "#1D5BD8".toColorInt()
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 12f
             canvas.drawText("PRESCRIÇÃO & PLANO DE TOMAS DIÁRIAS (${medicamentos.size} medicamentos)", 26f, yAtual, paint)
 
             // Cabeçalho da Tabela
             yAtual += 14f
-            paint.color = AndroidColor.parseColor("#E2E8F0")
+            paint.color = "#E2E8F0".toColorInt()
             canvas.drawRect(24f, yAtual, largura - 24f, yAtual + 22f, paint)
 
-            paint.color = AndroidColor.parseColor("#1E293B")
+            paint.color = "#1E293B".toColorInt()
             paint.textSize = 9f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             canvas.drawText("MEDICAMENTO", 30f, yAtual + 15f, paint)
@@ -825,7 +748,7 @@ class ServicosDispositivo(context: Context?) {
             paint.textSize = 9f
 
             if (medicamentos.isEmpty()) {
-                paint.color = AndroidColor.parseColor("#64748B")
+                paint.color = "#64748B".toColorInt()
                 canvas.drawText("Nenhum medicamento prescrito de momento.", 30f, yAtual + 20f, paint)
                 yAtual += 30f
             } else {
@@ -833,19 +756,19 @@ class ServicosDispositivo(context: Context?) {
                     if (yAtual > altura - 120f) return@forEachIndexed // Limite da página
 
                     if (idx % 2 == 1) {
-                        paint.color = AndroidColor.parseColor("#F8FAFC")
+                        paint.color = "#F8FAFC".toColorInt()
                         canvas.drawRect(24f, yAtual, largura - 24f, yAtual + 26f, paint)
                     }
 
                     // Nome do medicamento
-                    paint.color = AndroidColor.parseColor("#0F172A")
+                    paint.color = "#0F172A".toColorInt()
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     val nomeTrunc = if (med.nome.length > 25) med.nome.take(24) + "…" else med.nome
                     canvas.drawText(nomeTrunc, 30f, yAtual + 17f, paint)
 
                     // Princípio Ativo
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.color = AndroidColor.parseColor("#475569")
+                    paint.color = "#475569".toColorInt()
                     val princTrunc = if (med.principioAtivo.length > 20) med.principioAtivo.take(19) + "…" else med.principioAtivo.ifBlank { "-" }
                     canvas.drawText(princTrunc, 200f, yAtual + 17f, paint)
 
@@ -859,10 +782,10 @@ class ServicosDispositivo(context: Context?) {
 
                     // Estado
                     if (med.ativo) {
-                        paint.color = AndroidColor.parseColor("#059669")
+                        paint.color = "#059669".toColorInt()
                         canvas.drawText("Ativo", 520f, yAtual + 17f, paint)
                     } else {
-                        paint.color = AndroidColor.parseColor("#DC2626")
+                        paint.color = "#DC2626".toColorInt()
                         canvas.drawText("Pausado", 520f, yAtual + 17f, paint)
                     }
 
@@ -873,13 +796,13 @@ class ServicosDispositivo(context: Context?) {
             // 4. Secção de Produtos Naturais e Suplementos
             if (outrosProdutos.isNotEmpty() && yAtual < altura - 140f) {
                 yAtual += 16f
-                paint.color = AndroidColor.parseColor("#1D5BD8")
+                paint.color = "#1D5BD8".toColorInt()
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 paint.textSize = 10f
                 canvas.drawText("SUPLEMENTOS E OUTROS PRODUTOS EM TOMA", 26f, yAtual, paint)
 
                 yAtual += 6f
-                paint.color = AndroidColor.parseColor("#334155")
+                paint.color = "#334155".toColorInt()
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.textSize = 9f
                 outrosProdutos.forEach { prod ->
@@ -889,10 +812,10 @@ class ServicosDispositivo(context: Context?) {
             }
 
             // 5. Rodapé Clínico e Contactos
-            paint.color = AndroidColor.parseColor("#EFF6FF")
+            paint.color = "#EFF6FF".toColorInt()
             canvas.drawRoundRect(24f, altura - 75f, largura - 24f, altura - 20f, 8f, 8f, paint)
 
-            paint.color = AndroidColor.parseColor("#1E40AF")
+            paint.color = "#1E40AF".toColorInt()
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 8.5f
             canvas.drawText("Aviso Clínico de Segurança do Doente:", 34f, altura - 58f, paint)
@@ -986,8 +909,6 @@ class ServicosDispositivo(context: Context?) {
         }
     }
 }
-
-typealias AcoesPlataforma = ServicosDispositivo
 
 /**
  * Receiver para receber o alarme programado pelo AlarmManager para a toma de medicamentos.

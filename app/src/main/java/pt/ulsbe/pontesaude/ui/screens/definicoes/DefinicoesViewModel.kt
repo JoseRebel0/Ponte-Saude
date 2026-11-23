@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.definicoes
 
 import androidx.lifecycle.ViewModel
@@ -27,6 +29,9 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
  */
 data class DefinicoesUiState(
     val perfil: Perfil? = null,
+    val perfilSessao: Perfil? = null,
+    val todosOsPerfis: List<Perfil> = emptyList(),
+    val indicePerfilCuidado: Int = 0,
     val textoGrande: Boolean = false,
     val altoContraste: Boolean = false,
     val reduzirMovimento: Boolean = false,
@@ -62,9 +67,15 @@ class DefinicoesViewModel(
      */
     fun recarregar() {
         val perfil = perfilRepository.perfilAtivo
+        val perfilSessao = perfilRepository.perfilSessao
+        val todos = perfilRepository.todosOsPerfis
+        val indice = perfilRepository.indicePerfilCuidado
         _uiState.update {
             it.copy(
                 perfil = perfil,
+                perfilSessao = perfilSessao,
+                todosOsPerfis = todos,
+                indicePerfilCuidado = indice,
                 textoGrande = configuracaoRepository.textoGrande,
                 altoContraste = configuracaoRepository.altoContraste,
                 reduzirMovimento = configuracaoRepository.reduzirMovimento,
@@ -125,5 +136,46 @@ class DefinicoesViewModel(
      */
     fun terminarSessaoCMD() {
         perfilRepository.terminarSessaoCMD()
+    }
+
+    /**
+     * Alterna o estado do Modo Cuidador nas preferências do utente.
+     */
+    fun atualizarModoCuidador(ativo: Boolean) {
+        perfilRepository.atualizarModoCuidador(ativo)
+        recarregar()
+    }
+
+    /**
+     * Associa um perfil existente à lista de utentes acompanhados.
+     */
+    fun associarPerfilCuidado(id: String) {
+        perfilRepository.associarPerfilCuidado(id)
+        recarregar()
+    }
+
+    /**
+     * Remove um perfil da lista de utentes acompanhados pelo cuidador.
+     */
+    fun desassociarPerfilCuidado(id: String) {
+        perfilRepository.desassociarPerfilCuidado(id)
+        recarregar()
+    }
+
+    /**
+     * Cria e adiciona um novo perfil de familiar acompanhado à conta do cuidador.
+     */
+    fun adicionarPessoaCuidada(nome: String, relacao: String, numeroUtente: String, nif: String): Perfil {
+        val p = perfilRepository.adicionarPessoaCuidada(nome, relacao, numeroUtente, nif)
+        recarregar()
+        return p
+    }
+
+    /**
+     * Define o perfil acompanhado que está ativo no momento para visualização em todos os ecrãs.
+     */
+    fun definirPerfilCuidado(indice: Int) {
+        perfilRepository.definirPerfilCuidado(indice)
+        recarregar()
     }
 }

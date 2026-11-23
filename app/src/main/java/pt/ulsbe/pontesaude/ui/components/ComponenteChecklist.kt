@@ -26,19 +26,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Fastfood
-import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -47,7 +39,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -58,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -66,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.ItemChecklist
+import pt.ulsbe.pontesaude.ui.screens.consultas.ConsultasViewModel
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
@@ -89,6 +80,7 @@ fun ChecklistInterativa(
     itensPredefinidos: List<ItemChecklist>,
     chavePersistencia: String,
     idPerfil: String = "",
+    viewModel: ConsultasViewModel? = null,
     consultaRepository: ConsultaRepository? = null,
     plataforma: ServicosDispositivo? = null,
     permiteAdicionar: Boolean = false,
@@ -96,15 +88,17 @@ fun ChecklistInterativa(
 ) {
     val chaveEfetiva = if (idPerfil.isNotBlank()) "${chavePersistencia}_$idPerfil" else chavePersistencia
     val marcados = remember(chaveEfetiva) {
-        val salvos = if (idPerfil.isNotBlank()) {
-            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
-            if (idCons != null && consultaRepository != null) {
-                consultaRepository.obterChecklistSalva(idCons, idPerfil)
-            } else {
-                consultaRepository?.obterChecklistSalva(chavePersistencia, idPerfil).orEmpty()
+        val salvos = when {
+            viewModel != null -> viewModel.obterChecklistSalva(chavePersistencia, idPerfil)
+            idPerfil.isNotBlank() -> {
+                val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+                if (idCons != null && consultaRepository != null) {
+                    consultaRepository.obterChecklistSalva(idCons, idPerfil)
+                } else {
+                    consultaRepository?.obterChecklistSalva(chavePersistencia, idPerfil).orEmpty()
+                }
             }
-        } else {
-            consultaRepository?.obterChecklistSalva(chavePersistencia).orEmpty()
+            else -> consultaRepository?.obterChecklistSalva(chavePersistencia).orEmpty()
         }
         mutableStateMapOf<String, Boolean>().apply {
             salvos.forEach { put(it, true) }
@@ -112,15 +106,17 @@ fun ChecklistInterativa(
     }
 
     val customItens = remember(chaveEfetiva) {
-        val salvosCustom = if (idPerfil.isNotBlank()) {
-            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
-            if (idCons != null && consultaRepository != null) {
-                consultaRepository.obterItensCustomChecklist(idCons, idPerfil)
-            } else {
-                consultaRepository?.obterItensCustomChecklist(chavePersistencia, idPerfil).orEmpty()
+        val salvosCustom = when {
+            viewModel != null -> viewModel.obterItensCustomChecklist(chavePersistencia, idPerfil)
+            idPerfil.isNotBlank() -> {
+                val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+                if (idCons != null && consultaRepository != null) {
+                    consultaRepository.obterItensCustomChecklist(idCons, idPerfil)
+                } else {
+                    consultaRepository?.obterItensCustomChecklist(chavePersistencia, idPerfil).orEmpty()
+                }
             }
-        } else {
-            consultaRepository?.obterItensCustomChecklist(chavePersistencia).orEmpty()
+            else -> consultaRepository?.obterItensCustomChecklist(chavePersistencia).orEmpty()
         }
         mutableStateListOf<ItemChecklist>().apply {
             salvosCustom.forEachIndexed { i, texto ->
@@ -142,28 +138,36 @@ fun ChecklistInterativa(
     var filtroAtual by remember { mutableStateOf(FiltroChecklist.TODAS) }
 
     fun sincronizarMarcados() {
-        val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
-        if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
-            consultaRepository.salvarChecklist(idCons, idPerfil, marcados.filter { it.value }.keys.toSet())
+        if (viewModel != null) {
+            viewModel.salvarChecklist(chavePersistencia, marcados.filter { it.value }.keys.toSet(), idPerfil)
         } else {
-            consultaRepository?.salvarChecklist(
-                chavePersistencia,
-                marcados.filter { it.value }.keys.toSet(),
-                idPerfil,
-            )
+            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+            if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
+                consultaRepository.salvarChecklist(idCons, idPerfil, marcados.filter { it.value }.keys.toSet())
+            } else {
+                consultaRepository?.salvarChecklist(
+                    chavePersistencia,
+                    marcados.filter { it.value }.keys.toSet(),
+                    idPerfil,
+                )
+            }
         }
     }
 
     fun sincronizarCustom() {
-        val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
-        if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
-            consultaRepository.salvarItensCustomChecklist(idCons, idPerfil, customItens.map { it.texto })
+        if (viewModel != null) {
+            viewModel.salvarItensCustomChecklist(chavePersistencia, customItens.map { it.texto }, idPerfil)
         } else {
-            consultaRepository?.salvarItensCustomChecklist(
-                chavePersistencia,
-                customItens.map { it.texto },
-                idPerfil,
-            )
+            val idCons = chavePersistencia.removePrefix("consulta_").toIntOrNull()
+            if (idCons != null && idPerfil.isNotBlank() && consultaRepository != null) {
+                consultaRepository.salvarItensCustomChecklist(idCons, idPerfil, customItens.map { it.texto })
+            } else {
+                consultaRepository?.salvarItensCustomChecklist(
+                    chavePersistencia,
+                    customItens.map { it.texto },
+                    idPerfil,
+                )
+            }
         }
     }
 

@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.consultas
 
 import androidx.compose.foundation.background
@@ -5,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,16 +56,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
-import pt.ulsbe.pontesaude.data.repository.ConsultaRepository
-import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
+import pt.ulsbe.pontesaude.ui.components.BarraScrollLateralSuave
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.components.ChecklistInterativa
@@ -80,21 +82,18 @@ import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 fun EcraConsultas(
     perfil: Perfil,
     viewModel: ConsultasViewModel? = null,
-    consultaRepository: ConsultaRepository? = null,
-    perfilRepository: PerfilRepository? = null,
-    configuracaoRepository: ConfiguracaoRepository? = null,
     aoSincronizar: (suspend () -> Unit)? = null,
     plataforma: ServicosDispositivo,
 ) {
     val uiState = viewModel?.uiState?.collectAsState()?.value
-    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil ?: perfil else perfil
+    val perfilAtivo = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.perfil else perfil
     val consultas = if (uiState != null && uiState.perfil?.id == perfil.id) {
         uiState.consultas
     } else {
-        consultaRepository?.consultas(perfil) ?: perfil.consultas
+        perfil.consultas
     }
-    val modoCuidador = uiState?.modoCuidador ?: (perfilRepository?.modoCuidador == true)
-    val agendaAtiva = uiState?.agendaEAlarmesAtivos ?: configuracaoRepository?.agendaEAlarmesAtivos ?: true
+    val modoCuidador = uiState?.modoCuidador ?: false
+    val agendaAtiva = uiState?.agendaEAlarmesAtivos ?: true
 
     val estadoLista = rememberLazyListState()
     var aAtualizarLocal by remember { mutableStateOf(false) }
@@ -142,7 +141,7 @@ fun EcraConsultas(
                     aAtualizarLocal = true
                     escopo.launch {
                         aoSincronizar?.invoke()
-                        delay(500)
+                        delay(500.milliseconds)
                         aAtualizarLocal = false
                     }
                 }
@@ -154,11 +153,11 @@ fun EcraConsultas(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 state = estadoLista,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 32.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-            if (perfilRepository?.modoCuidador == true) {
+            if (modoCuidador) {
                 item {
                     Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
@@ -252,19 +251,18 @@ fun EcraConsultas(
             }
 
             if (selecionada != null) {
-                val consultaAtiva = selecionada
                 item {
-                    val itensChecklist = remember(consultaAtiva.id) {
-                        gerarChecklistParaConsulta(consultaAtiva)
+                    val itensChecklist = remember(selecionada.id) {
+                        gerarChecklistParaConsulta(selecionada)
                     }
                     Box(Modifier.padding(horizontal = 20.dp)) {
                         ChecklistInterativa(
-                            titulo = "Checklist · ${consultaAtiva.titulo}",
-                            subtitulo = "Preparação específica para ${consultaAtiva.tipo}",
+                            titulo = "Checklist · ${selecionada.titulo}",
+                            subtitulo = "Preparação específica para ${selecionada.tipo}",
                             itensPredefinidos = itensChecklist,
-                            chavePersistencia = "consulta_${consultaAtiva.id}",
+                            chavePersistencia = "consulta_${selecionada.id}",
                             idPerfil = perfilAtivo.id,
-                            consultaRepository = consultaRepository,
+                            viewModel = viewModel,
                             plataforma = plataforma,
                             permiteAdicionar = false,
                         )
@@ -296,11 +294,11 @@ fun EcraConsultas(
                                     TextButton(
                                         onClick = {
                                             plataforma.adicionarConsultaAoCalendario(
-                                                consultaAtiva.titulo,
+                                                selecionada.titulo,
                                                 "Consulta no Serviço Nacional de Saúde (ULSBE). Recomendações: Levar Cartão de Cidadão, medicação e exames.",
-                                                consultaAtiva.localizacao,
-                                                consultaAtiva.dia,
-                                                consultaAtiva.mes,
+                                                selecionada.localizacao,
+                                                selecionada.dia,
+                                                selecionada.mes,
                                             )
                                         },
                                         colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF065F46)),
@@ -406,6 +404,13 @@ fun EcraConsultas(
                 }
             }
         }
+
+        BarraScrollLateralSuave(
+            estadoLista = estadoLista,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp, top = 12.dp, bottom = 16.dp),
+        )
     }
     }
 
@@ -421,7 +426,7 @@ fun EcraConsultas(
             onDismissRequest = { mostrarDialogoNovaConsulta = false },
             title = {
                 Text(
-                    text = if (perfilRepository?.modoCuidador == true) "Agendar para ${perfil.nomeCurto}" else "Agendar Consulta ou Exame",
+                    text = if (modoCuidador) "Agendar para ${perfil.nomeCurto}" else "Agendar Consulta ou Exame",
                     fontWeight = FontWeight.Bold,
                 )
             },
@@ -494,11 +499,7 @@ fun EcraConsultas(
                             tipo = novoTipo.trim().ifBlank { "Consulta Externa" },
                             jejum = precisaJejum,
                         )
-                        if (viewModel != null) {
-                            viewModel.agendarConsulta(nova)
-                        } else {
-                            consultaRepository?.adicionarConsulta(perfilAtivo, nova)
-                        }
+                        viewModel?.agendarConsulta(nova)
                         idSelecionado = novoId
                         mostrarDialogoNovaConsulta = false
                     },
