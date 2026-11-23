@@ -184,7 +184,7 @@ fun EcraLoginCMD(
         mensagemErro = null
         emProgresso = true
         escopo.launch {
-            textoProgresso = "A ligar a Autenticação.gov..."
+            textoProgresso = "A simular a Chave Móvel Digital..."
             delay(300.milliseconds)
             val perfilAlvo = perfisDemonstracao.firstOrNull { it.id == idPerfil }
             val telPerfil = perfilAlvo?.telemovel?.trim().orEmpty()
@@ -372,7 +372,7 @@ fun EcraLoginCMD(
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "Autenticação Oficial Certificada",
+                                    text = "Simulação da Chave Móvel Digital",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                     fontWeight = FontWeight.SemiBold,
@@ -437,7 +437,7 @@ fun EcraLoginCMD(
                                             color = MarcaProfundo,
                                         )
                                         Text(
-                                            text = "Autenticação.gov · República Portuguesa",
+                                            text = "Demonstração · não é a Autenticação.gov",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Atenuado,
                                         )
@@ -674,8 +674,8 @@ fun EcraLoginCMD(
                                     // Botão de Confirmação e Entrada
                                     Button(
                                         onClick = {
-                                            if (codigoSMS.isBlank()) {
-                                                mensagemErro = "Por favor introduza o código de segurança ou clique em preencher."
+                                            if (codigoSMS.trim() != codigoSmsGerado) {
+                                                mensagemErro = "Código incorreto. Introduza o código de 6 dígitos ou clique em preencher."
                                             } else {
                                                 executarAutenticacao(perfilEscolhidoId)
                                             }
@@ -746,7 +746,7 @@ fun EcraLoginCMD(
 
                                 AnimatedVisibility(visible = mostrarAjuda) {
                                     Text(
-                                        text = "A Chave Móvel Digital (CMD) é o método oficial do Estado Português para aceder com segurança a serviços públicos como o SNS, Segurança Social e Finanças. Ao autenticar-se, a aplicação Ponte Saúde recupera os seus dados clínicos, consultas e medicação de forma segura.",
+                                        text = "Esta é uma simulação da Chave Móvel Digital, só para demonstração. Nenhum dado é enviado para a Autenticação.gov. Os dados de identificação ficam apenas neste telemóvel.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Atenuado,
                                         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -1100,7 +1100,7 @@ fun EcraLoginCMD(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Dados protegidos em conformidade com o RGPD e normas do SNS",
+                            text = "Aplicação de demonstração · usar apenas dados fictícios",
                             style = MaterialTheme.typography.bodySmall,
                             color = Atenuado.copy(alpha = 0.7f),
                             textAlign = TextAlign.Center,

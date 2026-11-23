@@ -16,7 +16,7 @@ class ApiMedicacaoRemoto(
 
     /**
      * Guarda ou atualiza a informação de um medicamento na subcoleção do perfil no Firestore.
-     * Grava a fotografia da caixa no campo "fotografia".
+     * A fotografia da caixa NÃO é enviada (fica só no telemóvel).
      */
     suspend fun guardarMedicamento(idPerfil: String, med: Medicamento) = withContext(Dispatchers.IO) {
         val dto = MedicamentoDtoRemoto(
@@ -27,7 +27,7 @@ class ApiMedicacaoRemoto(
             hora = med.hora,
             cor = med.cor,
             ativo = med.ativo,
-            fotografia = med.fotografia ?: "",
+            fotografia = "", // fotografias ficam só no telemóvel
             laboratorio = med.laboratorio,
         )
         db.collection("perfis")

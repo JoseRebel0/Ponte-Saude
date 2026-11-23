@@ -18,7 +18,7 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
  * Atividade principal da aplicação Ponte Saúde.
  *
  * Responsável por:
- * - Solicitar permissões necessárias do sistema (calendário e notificações).
+ * - Solicitar a permissão de notificações (o calendário é pedido nas Consultas).
  * - Inicializar o repositório central e os serviços de dispositivo.
  */
 class MainActivity : ComponentActivity() {
@@ -31,10 +31,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val permissoesParaPedir = mutableListOf(
-            Manifest.permission.READ_CALENDAR,
-            Manifest.permission.WRITE_CALENDAR,
-        )
+        // O calendário só é pedido quando o utilizador abre as Consultas (ver EcraConsultas).
+        val permissoesParaPedir = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissoesParaPedir.add(Manifest.permission.POST_NOTIFICATIONS)
         }

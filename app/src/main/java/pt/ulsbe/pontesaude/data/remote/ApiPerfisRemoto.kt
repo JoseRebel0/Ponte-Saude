@@ -18,8 +18,8 @@ import pt.ulsbe.pontesaude.model.VoucherResgatado
  * Módulo remoto responsável pela gestão de perfis de utentes, associações cuidador-utente
  * e sincronização em tempo real no Cloud Firestore.
  *
- * Implementa a cifra ponta-a-ponta (RGPD / AES-256) dos dados pessoais de saúde antes
- * de serem transmitidos para a cloud.
+ * Só envia dados clínicos ligados a um id aleatório (pseudonimização). A identificação
+ * (nome, NIF, telemóvel, etc.) nunca sai do telemóvel.
  */
 class ApiPerfisRemoto(
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -27,9 +27,17 @@ class ApiPerfisRemoto(
 
     private var listenerPerfis: ListenerRegistration? = null
 
+    private companion object {
+        val CAMPOS_IDENTIFICACAO_ANTIGOS = listOf(
+            "nome", "nomeCurto", "relacao", "iniciais", "nif", "numeroUtente",
+            "cartaoCidadao", "dataNascimento", "telemovel", "email",
+            "rgpdProtegido", "conformidadeRgpd",
+        )
+    }
+
     /**
      * Guarda um perfil completo no Firestore, incluindo subcoleções de medicamentos, consultas e notas.
-     * Os dados de identificação pessoal são cifrados com AES-256 (RGPD).
+     * Não envia dados de identificação nem fotografias.
      */
     suspend fun salvarPerfilCompleto(
         perfil: Perfil,
@@ -54,28 +62,18 @@ class ApiPerfisRemoto(
             )
         }
 
-        val donoUid = AutenticadorFirebaseCMD.uidAtual ?: perfil.id
+        val donoUid = AutenticadorFirebaseCMD.garantirSessao() ?: error("Sem sessão no Firebase")
         val cuidadoresValidos =
             perfil.cuidadoresIds.filter { it != perfil.id && it != donoUid }.distinct()
         val cuidadosValidos = perfil.perfisCuidadosIds.filter { it != perfil.id }.distinct()
         val dadosPerfil = PerfilDtoRemoto(
             id = perfil.id,
             donoUid = donoUid,
-            nome = perfil.nome,
-            nomeCurto = perfil.nomeCurto,
-            relacao = perfil.relacao,
-            iniciais = perfil.iniciais,
             tipoSanguineo = perfil.tipoSanguineo,
             alergias = perfil.alergias,
-            nif = Criptografia.cifrar(perfil.nif),
-            numeroUtente = Criptografia.cifrar(perfil.numeroUtente),
-            cartaoCidadao = Criptografia.cifrar(perfil.cartaoCidadao),
-            dataNascimento = Criptografia.cifrar(perfil.dataNascimento),
-            telemovel = Criptografia.cifrar(perfil.telemovel),
-            email = Criptografia.cifrar(perfil.email),
             perfisCuidadosIds = cuidadosValidos,
             cuidadoresIds = cuidadoresValidos,
-            outrosProdutos = Criptografia.cifrarLista(perfil.outrosProdutos),
+            outrosProdutos = perfil.outrosProdutos,
             pontosSeguranca = pontos,
             modulosConcluidos = modulosConcluidos,
             modulosOuvidos = modulosOuvidos,
@@ -84,6 +82,11 @@ class ApiPerfisRemoto(
         )
 
         docPerfil.set(dadosPerfil, SetOptions.merge()).await()
+
+        // Remove campos de identificação que versões antigas enviaram para o Firestore.
+        runCatching {
+            docPerfil.update(CAMPOS_IDENTIFICACAO_ANTIGOS.associateWith { FieldValue.delete() }).await()
+        }
 
         // 1. Guardar Medicamentos na subcoleção remota
         val colMedicamentos = docPerfil.collection("medicamentos")
@@ -96,7 +99,7 @@ class ApiPerfisRemoto(
                 hora = med.hora,
                 cor = med.cor,
                 ativo = med.ativo,
-                fotografia = med.fotografia ?: "",
+                fotografia = "", // fotografias ficam só no telemóvel
                 laboratorio = med.laboratorio,
             )
             colMedicamentos.document(med.id.toString()).set(dadosMed, SetOptions.merge()).await()
@@ -142,7 +145,6 @@ class ApiPerfisRemoto(
 
     /**
      * Carrega os perfis pertencentes ao utente autenticado (ou sob o seu cuidado) no Firestore.
-     * Decifra automaticamente no dispositivo os dados de identificação pessoal protegidos pelo RGPD.
      */
     suspend fun carregarPerfisFirestore(): Result<List<DadosPerfilRemoto>> =
         withContext(Dispatchers.IO) {
@@ -153,40 +155,33 @@ class ApiPerfisRemoto(
                         db.collection("perfis").whereEqualTo("donoUid", uidAtual).get().await()
                     }.getOrNull()
                     val snapCuidador = runCatching {
-                        db.collection("perfis").whereArrayContains("cuidadoresIds", uidAtual).get().await()
+                        db.collection("perfis").whereArrayContains("cuidadoresUids", uidAtual).get().await()
                     }.getOrNull()
-                    val filtrados = ((snapDono?.documents.orEmpty()) + (snapCuidador?.documents.orEmpty())).distinctBy { it.id }
-                    if (filtrados.isNotEmpty()) {
-                        filtrados
-                    } else {
-                        runCatching { db.collection("perfis").get().await().documents }.getOrDefault(emptyList())
-                    }
+                    ((snapDono?.documents.orEmpty()) + (snapCuidador?.documents.orEmpty())).distinctBy { it.id }
                 } else {
-                    // Sem sessão iniciada (ecrã de login): carregar todos os perfis do Firestore para permitir seleção de teste
-                    runCatching { db.collection("perfis").get().await().documents }.getOrDefault(emptyList())
+                    // Sem sessão no Firebase não se carrega nada (nunca se listam perfis de outras pessoas).
+                    emptyList()
                 }
                 val lista = mutableListOf<DadosPerfilRemoto>()
 
                 for (doc in docs) {
                     val id = doc.getString("id") ?: doc.id
-                    val nomeRaw = doc.getString("nome")
-                    val nome = Criptografia.decifrar(nomeRaw).ifBlank { "Utente SNS" }
-                    val nomeCurto =
-                        Criptografia.decifrar(doc.getString("nomeCurto")).ifBlank { nome }
-                    val relacao = doc.getString("relacao") ?: "Utente"
-                    val iniciais = doc.getString("iniciais") ?: "UT"
+                    // A identificação NÃO vem do Firestore: é preenchida com os dados locais (Room)
+                    // em AppContainer.sincronizarComFirestore. Estes valores só aparecem se o perfil
+                    // não existir neste telemóvel.
+                    val nome = "Utente"
+                    val nomeCurto = "Utente"
+                    val relacao = "Utente"
+                    val iniciais = "UT"
                     val tipoSanguineo =
-                        Criptografia.decifrar(doc.getString("tipoSanguineo")).ifBlank { "A+" }
-                    val alergias = Criptografia.decifrar(doc.getString("alergias"))
-                        .ifBlank { "Sem alergias conhecidas" }
-                    val nif = Criptografia.decifrar(doc.getString("nif")).ifBlank { "999 999 999" }
-                    val numeroUtente = Criptografia.decifrar(doc.getString("numeroUtente"))
-                        .ifBlank { "123 456 789" }
-                    val cartaoCidadao = Criptografia.decifrar(doc.getString("cartaoCidadao"))
-                    val dataNascimento = Criptografia.decifrar(doc.getString("dataNascimento"))
-                        .ifBlank { "01/01/1970" }
-                    val telemovel = Criptografia.decifrar(doc.getString("telemovel"))
-                    val email = Criptografia.decifrar(doc.getString("email"))
+                        doc.getString("tipoSanguineo")?.ifBlank { null } ?: "—"
+                    val alergias = doc.getString("alergias")?.ifBlank { null } ?: "Sem informação"
+                    val nif = ""
+                    val numeroUtente = ""
+                    val cartaoCidadao = ""
+                    val dataNascimento = ""
+                    val telemovel = ""
+                    val email = ""
 
                     val donoUidDoc = doc.getString("donoUid") ?: id
 
@@ -393,17 +388,19 @@ class ApiPerfisRemoto(
             }
             docRef.delete().await()
 
-            val snapCuidados = db.collection("perfis")
-                .whereArrayContains("perfisCuidadosIds", idPerfil)
-                .get().await()
-            for (d in snapCuidados.documents) {
-                d.reference.update("perfisCuidadosIds", FieldValue.arrayRemove(idPerfil)).await()
-            }
-            val snapCuidadores = db.collection("perfis")
-                .whereArrayContains("cuidadoresIds", idPerfil)
-                .get().await()
-            for (d in snapCuidadores.documents) {
-                d.reference.update("cuidadoresIds", FieldValue.arrayRemove(idPerfil)).await()
+            val uid = AutenticadorFirebaseCMD.uidAtual.orEmpty()
+            // Só os perfis do próprio dono (as regras não deixam listar outros) e filtra em código,
+            // para não precisar de índices compostos no Firestore.
+            val meus = db.collection("perfis").whereEqualTo("donoUid", uid).get().await()
+            for (d in meus.documents) {
+                @Suppress("UNCHECKED_CAST")
+                if (idPerfil in (d.get("perfisCuidadosIds") as? List<String> ?: emptyList())) {
+                    d.reference.update("perfisCuidadosIds", FieldValue.arrayRemove(idPerfil)).await()
+                }
+                @Suppress("UNCHECKED_CAST")
+                if (idPerfil in (d.get("cuidadoresIds") as? List<String> ?: emptyList())) {
+                    d.reference.update("cuidadoresIds", FieldValue.arrayRemove(idPerfil)).await()
+                }
             }
         }
     }
