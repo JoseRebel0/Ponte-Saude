@@ -31,7 +31,7 @@ private val EsquemaCores = lightColorScheme(
 @Composable
 fun TemaPonteSaude(textoGrande: Boolean, content: @Composable () -> Unit) {
     val escala = if (textoGrande) 1.18f else 1f
-    val base = Typography()
+    val base = TipografiaPadrao
     val tipografia = if (textoGrande) {
         Typography(
             displayLarge = base.displayLarge.copy(fontSize = (base.displayLarge.fontSize.value * escala).sp),

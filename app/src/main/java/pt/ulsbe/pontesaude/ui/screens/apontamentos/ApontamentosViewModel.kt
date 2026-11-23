@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.apontamentos
 
 import androidx.lifecycle.ViewModel
@@ -33,6 +35,7 @@ data class ApontamentosUiState(
     val aCarregarIa: Boolean = false,
     val mensagemErro: String? = null,
     val mensagemSucesso: String? = null,
+    val modoCuidadorAtivo: Boolean = false,
 )
 
 /**
@@ -72,6 +75,7 @@ class ApontamentosViewModel(
                 termoIa = if (perfilMudou) null else it.termoIa,
                 aCarregarIa = if (perfilMudou) false else it.aCarregarIa,
                 mensagemErro = if (perfilMudou) null else it.mensagemErro,
+                modoCuidadorAtivo = perfilRepository.modoCuidador,
             )
         }
     }
@@ -100,13 +104,19 @@ class ApontamentosViewModel(
         val limpo = texto.trim()
         if (limpo.isBlank()) return
         val perfil = perfilRepository.perfilAtivo
-        notaRepository.adicionarNota(perfil, Nota(limpo, "Utente"))
+        notaRepository.adicionarNota(perfil, Nota(limpo, autor))
         recarregar()
     }
 
     /**
-     * Remove uma nota existente pela sua posição na lista.
+     * Remove uma nota existente pela sua referência direta ou pela sua posição na lista.
      */
+    fun apagarNota(nota: Nota) {
+        val perfil = perfilRepository.perfilAtivo
+        notaRepository.apagarNota(perfil, nota)
+        recarregar()
+    }
+
     fun apagarNota(indice: Int) {
         val perfil = perfilRepository.perfilAtivo
         notaRepository.apagarNota(perfil, indice)

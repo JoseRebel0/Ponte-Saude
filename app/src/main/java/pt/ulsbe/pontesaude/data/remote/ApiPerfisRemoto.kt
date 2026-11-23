@@ -75,7 +75,7 @@ class ApiPerfisRemoto(
             email = Criptografia.cifrar(perfil.email),
             perfisCuidadosIds = cuidadosValidos,
             cuidadoresIds = cuidadoresValidos,
-            outrosProdutos = perfil.outrosProdutos,
+            outrosProdutos = Criptografia.cifrarLista(perfil.outrosProdutos),
             pontosSeguranca = pontos,
             modulosConcluidos = modulosConcluidos,
             modulosOuvidos = modulosOuvidos,
@@ -125,13 +125,19 @@ class ApiPerfisRemoto(
 
         // 3. Guardar Notas na subcoleção remota
         val colNotas = docPerfil.collection("notas")
+        val notasExistentes = colNotas.get().await()
+        val batchNotas = db.batch()
+        for (doc in notasExistentes.documents) {
+            batchNotas.delete(doc.reference)
+        }
         for ((idx, nota) in perfil.notas.withIndex()) {
             val dadosNota = NotaDtoRemoto(
                 texto = nota.texto,
                 autor = nota.autor,
             )
-            colNotas.document("nota_${idx + 1}").set(dadosNota, SetOptions.merge()).await()
+            batchNotas.set(colNotas.document("nota_${idx + 1}"), dadosNota)
         }
+        batchNotas.commit().await()
     }
 
     /**
@@ -272,14 +278,16 @@ class ApiPerfisRemoto(
 
                     // Subcoleção: Notas
                     val notasSnapshot = doc.reference.collection("notas").get().await()
-                    val notas = notasSnapshot.documents.mapNotNull { nDoc ->
-                        runCatching {
-                            Nota(
-                                texto = Criptografia.decifrar(nDoc.getString("texto")),
-                                autor = Criptografia.decifrar(nDoc.getString("autor")),
-                            )
-                        }.getOrNull()
-                    }
+                    val notas = notasSnapshot.documents
+                        .sortedBy { it.id.removePrefix("nota_").toIntOrNull() ?: 0 }
+                        .mapNotNull { nDoc ->
+                            runCatching {
+                                Nota(
+                                    texto = Criptografia.decifrar(nDoc.getString("texto")),
+                                    autor = Criptografia.decifrar(nDoc.getString("autor")),
+                                )
+                            }.getOrNull()
+                        }
 
                     val perfilCarregado = Perfil(
                         id = id,

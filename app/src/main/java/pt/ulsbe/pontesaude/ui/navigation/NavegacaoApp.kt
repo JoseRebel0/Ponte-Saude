@@ -21,7 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.model.Consulta
@@ -123,7 +122,6 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
         } else if (!container.perfil.autenticado) {
             EcraLoginCMD(
                 viewModel = loginViewModel,
-                perfilRepository = container.perfil,
                 sincronizador = container,
                 aoAutenticar = { idPerfil ->
                     container.perfil.iniciarSessaoCMD(idPerfil)
@@ -195,8 +193,6 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             SeparadorApp.INICIO -> EcraInicio(
                                 perfil = perfil,
                                 viewModel = inicioViewModel,
-                                perfilRepository = container.perfil,
-                                configuracaoRepository = container.configuracao,
                                 aoSincronizar = { container.sincronizarComFirestore() },
                                 plataforma = plataforma,
                                 navegarPara = navegarPara,
@@ -205,10 +201,6 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                                 perfil = perfil,
                                 idModuloAberto = idModulo,
                                 viewModel = saudeViewModel,
-                                concluidos = container.saude.modulosConcluidos,
-                                saudeRepository = container.saude,
-                                perfilRepository = container.perfil,
-                                configuracaoRepository = container.configuracao,
                                 plataforma = plataforma,
                                 aoAbrirModulo = { moduloAberto = it },
                                 aoAlternarModulo = { idMod -> saudeViewModel.alternarConclusaoModulo(idMod) },
@@ -217,37 +209,23 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             SeparadorApp.CONSULTAS -> EcraConsultas(
                                 perfil = perfil,
                                 viewModel = consultasViewModel,
-                                consultaRepository = container.consultas,
-                                perfilRepository = container.perfil,
-                                configuracaoRepository = container.configuracao,
                                 aoSincronizar = { container.sincronizarComFirestore() },
                                 plataforma = plataforma,
                             )
                             SeparadorApp.MEDICACAO -> EcraMedicacao(
                                 perfil = perfil,
                                 viewModel = medicacaoViewModel,
-                                medicacaoRepository = container.medicacao,
-                                configuracaoRepository = container.configuracao,
-                                notaRepository = container.notas,
-                                perfilRepository = container.perfil,
                                 aoSincronizar = { container.sincronizarComFirestore() },
                                 plataforma = plataforma,
                             )
                             SeparadorApp.NOTAS -> EcraApontamentos(
                                 perfil = perfil,
                                 viewModel = apontamentosViewModel,
-                                notaRepository = container.notas,
-                                saudeRepository = container.saude,
-                                perfilRepository = container.perfil,
-                                configuracaoRepository = container.configuracao,
                                 plataforma = plataforma,
                             )
                             SeparadorApp.DEFINICOES -> EcraDefinicoes(
                                 perfil = perfil,
                                 viewModel = definicoesViewModel,
-                                configuracaoRepository = container.configuracao,
-                                perfilRepository = container.perfil,
-                                medicacaoRepository = container.medicacao,
                                 plataforma = plataforma,
                             )
                         }
@@ -257,11 +235,6 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
         }
     }
 }
-
-// Aliases para compatibilidade
-@Composable
-fun AplicacaoPonteSaude(container: AppContainer, plataforma: ServicosDispositivo) =
-    NavegacaoApp(container, plataforma)
 
 @Preview(name = "Aplicação Ponte Saúde Completa", showBackground = true)
 @Composable

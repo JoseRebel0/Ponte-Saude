@@ -15,6 +15,7 @@ import pt.ulsbe.pontesaude.data.local.paraModelo
 import pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
 import pt.ulsbe.pontesaude.data.remote.IntegracaoIA
+import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
 
 /**
@@ -117,6 +118,17 @@ class PerfilRepository(
     fun atualizarModoCuidador(valor: Boolean) {
         modoCuidador = valor
         preferencias.edit().putBoolean("caregiver", valor).apply()
+    }
+
+    fun atualizarNotasPerfil(idPerfil: String, notas: List<Nota>) {
+        val idx = todosOsPerfis.indexOfFirst { it.id == idPerfil }
+        if (idx >= 0) {
+            todosOsPerfis[idx] = todosOsPerfis[idx].copy(notas = notas)
+        }
+        val idxCuidado = pessoasCuidadas.indexOfFirst { it.id == idPerfil }
+        if (idxCuidado >= 0) {
+            pessoasCuidadas[idxCuidado] = pessoasCuidadas[idxCuidado].copy(notas = notas)
+        }
     }
 
     fun definirPerfilCuidado(indice: Int) {
@@ -273,8 +285,6 @@ class PerfilRepository(
             }
         }
     }
-
-    fun removerPessoaCuidada(id: String) = desassociarPerfilCuidado(id)
 
     suspend fun apagarPerfil(idPerfil: String) {
         val perfil = todosOsPerfis.find { it.id == idPerfil }

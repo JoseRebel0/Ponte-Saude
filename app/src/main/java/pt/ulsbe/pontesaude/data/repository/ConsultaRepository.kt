@@ -32,14 +32,17 @@ class ConsultaRepository(
     }
 
     fun consultas(perfil: Perfil): List<Consulta> {
-        val emMemoria = listaConsultas[perfil.id]
-        if (!emMemoria.isNullOrEmpty()) return emMemoria
+        if (listaConsultas.containsKey(perfil.id)) {
+            return listaConsultas[perfil.id].orEmpty()
+        }
         val doRoom = dbLocal.consultaDao().obterPorPerfil(perfil.id).map { it.paraModelo() }
         if (doRoom.isNotEmpty()) {
             listaConsultas[perfil.id] = doRoom
             return doRoom
         }
-        return perfil.consultas
+        val iniciais = perfil.consultas
+        listaConsultas[perfil.id] = iniciais
+        return iniciais
     }
 
     fun atualizarListaEmMemoria(idPerfil: String, consultas: List<Consulta>) {

@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.apontamentos
 
 import android.app.Activity
@@ -70,15 +72,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import pt.ulsbe.pontesaude.data.repository.ConfiguracaoRepository
-import pt.ulsbe.pontesaude.data.repository.NotaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
-import pt.ulsbe.pontesaude.data.repository.SaudeRepository
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
+import pt.ulsbe.pontesaude.ui.components.BarraScrollLateralSuave
 import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
@@ -136,10 +137,7 @@ private fun guardarHistoricoIa(context: Context, idPerfil: String, lista: List<I
 fun EcraApontamentos(
     perfil: Perfil,
     viewModel: ApontamentosViewModel? = null,
-    notaRepository: NotaRepository? = null,
-    saudeRepository: SaudeRepository? = null,
     perfilRepository: PerfilRepository? = null,
-    configuracaoRepository: ConfiguracaoRepository? = null,
     plataforma: ServicosDispositivo,
 ) {
     val uiState = viewModel?.uiState?.collectAsState()?.value
@@ -186,7 +184,7 @@ fun EcraApontamentos(
             val listaAtualizada = listOf(novoItem) + historicoAtual.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
             historicoIa = listaAtualizada
             guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
-            viewModel?.consumirExplicacaoIa()
+            viewModel.consumirExplicacaoIa()
         }
     }
 
@@ -204,27 +202,7 @@ fun EcraApontamentos(
                 avisoSemInternet = false
                 mensagemErroIa = null
                 explicacaoTradutor = null
-                if (viewModel != null) {
-                    viewModel.traduzirTermo(termo)
-                } else {
-                    aProcessarIa = true
-                    escopo.launch {
-                        val resultado = saudeRepository?.explicarTermoMedicoComIa(termo) ?: Result.failure(Exception("Serviço indisponível no momento."))
-                        resultado.onSuccess { explicacao ->
-                            explicacaoTradutor = explicacao
-                            val dataAtual = java.text.SimpleDateFormat("dd/MM · HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
-                            val historicoAtual = carregarHistoricoIa(contexto, perfil.id)
-                            val novoItem = ItemHistoricoIa(pergunta = termo.trim(), resposta = explicacao.trim(), dataHora = dataAtual)
-                            val listaAtualizada = listOf(novoItem) + historicoAtual.filterNot { it.pergunta.equals(termo.trim(), ignoreCase = true) }
-                            historicoIa = listaAtualizada
-                            guardarHistoricoIa(contexto, perfil.id, listaAtualizada)
-                        }.onFailure { erro ->
-                            android.util.Log.e("EcraApontamentos", "Falha na IA: ${erro.message}", erro)
-                            mensagemErroIa = erro.localizedMessage ?: erro.message.orEmpty()
-                        }
-                        aProcessarIa = false
-                    }
-                }
+                viewModel?.traduzirTermo(termo)
             }
         }
     }
@@ -250,16 +228,13 @@ fun EcraApontamentos(
     val adicionarNotaAoRegisto: (String) -> Unit = { texto ->
         if (texto.isNotBlank()) {
             val autorNota = "Utente"
-            if (viewModel != null) {
-                viewModel.adicionarNota(texto.trim(), autorNota)
-            } else {
-                notaRepository?.adicionarNota(perfil, Nota(texto.trim(), autorNota))
-            }
+            viewModel?.adicionarNota(texto.trim(), autorNota)
         }
     }
 
-    val tituloEcra = if (perfilRepository?.modoCuidador == true) "Notas · ${perfil.nome}" else "Notas"
-    val subtituloEcra = if (perfilRepository?.modoCuidador == true) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
+    val modoCuidadorAtivo = uiState?.modoCuidadorAtivo ?: (perfilRepository?.modoCuidador == true)
+    val tituloEcra = if (modoCuidadorAtivo) "Notas · ${perfil.nome}" else "Notas"
+    val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
 
     Column(Modifier.fillMaxSize()) {
         CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
@@ -269,8 +244,8 @@ fun EcraApontamentos(
             onRefresh = {
                 aAtualizar = true
                 escopo.launch {
-                    delay(800) // Transição suave de carregamento
-                    configuracaoRepository?.registarAtualizacao()
+                    delay(800.milliseconds) // Transição suave de carregamento
+                    viewModel?.recarregar()
                     aAtualizar = false
                 }
             },
@@ -285,7 +260,7 @@ fun EcraApontamentos(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // CARTÃO DE MODO CUIDADOR
-            if (perfilRepository?.modoCuidador == true) {
+            if (modoCuidadorAtivo) {
                 item {
                     Box(Modifier.padding(horizontal = 20.dp)) {
                         Card(
@@ -618,7 +593,7 @@ fun EcraApontamentos(
             }
 
             // 3. LISTA DE APONTAMENTOS REGISTADOS
-            val notas = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.notas else notaRepository?.notas(perfil) ?: perfil.notas
+            val notas = if (uiState != null && uiState.perfil?.id == perfil.id) uiState.notas else perfil.notas
             if (notas.isEmpty()) {
                 item {
                     Box(Modifier.padding(horizontal = 20.dp)) {
@@ -639,7 +614,10 @@ fun EcraApontamentos(
                     }
                 }
             } else {
-                itemsIndexed(notas) { indice, nota ->
+                itemsIndexed(
+                    items = notas,
+                    key = { indice, nota -> "${nota.texto}_${nota.autor}_$indice" },
+                ) { _, nota ->
                     Box(Modifier.padding(horizontal = 20.dp)) {
                         CartaoApp {
                             Row(
@@ -656,7 +634,7 @@ fun EcraApontamentos(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { if (viewModel != null) viewModel.apagarNota(indice) else notaRepository?.apagarNota(perfil, indice) },
+                                    onClick = { viewModel?.apagarNota(nota) },
                                     modifier = Modifier.size(36.dp),
                                 ) {
                                     Icon(Icons.Rounded.Delete, "Apagar nota", tint = Atenuado, modifier = Modifier.size(20.dp))
@@ -667,6 +645,13 @@ fun EcraApontamentos(
                 }
             }
         }
+
+        BarraScrollLateralSuave(
+            estadoLista = estadoLista,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp, top = 12.dp, bottom = 16.dp),
+        )
     }
 }
 
@@ -725,7 +710,7 @@ fun EcraApontamentos(
             },
             text = {
                 Text(
-                    mensagemErroIaEfetiva ?: "",
+                    mensagemErroIaEfetiva,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },

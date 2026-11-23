@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.inicio
 
 import androidx.lifecycle.ViewModel
@@ -16,6 +18,7 @@ import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Estado imutável da interface do Ecrã de Início ([EcraInicio]).
@@ -32,6 +35,8 @@ import pt.ulsbe.pontesaude.util.ServicosDispositivo
  */
 data class InicioUiState(
     val perfil: Perfil? = null,
+    val perfilSessao: Perfil? = null,
+    val indicePerfilCuidado: Int = 0,
     val proximaConsulta: Consulta? = null,
     val medicamentosHoje: List<Medicamento> = emptyList(),
     val modoCuidadorAtivo: Boolean = false,
@@ -67,6 +72,8 @@ class InicioViewModel(
      */
     fun atualizarEstado() {
         val perfil = perfilRepository.perfilAtivo
+        val perfilSessao = perfilRepository.perfilSessao
+        val indice = perfilRepository.indicePerfilCuidado
         val consultas = consultaRepository.consultas(perfil)
         val medicamentos = medicacaoRepository.medicamentos(perfil)
         val modoCuidador = perfilRepository.modoCuidador
@@ -76,6 +83,8 @@ class InicioViewModel(
         _uiState.update {
             it.copy(
                 perfil = perfil,
+                perfilSessao = perfilSessao,
+                indicePerfilCuidado = indice,
                 proximaConsulta = consultas.firstOrNull(),
                 medicamentosHoje = medicamentos.filter { med -> med.ativo },
                 modoCuidadorAtivo = modoCuidador,
@@ -92,7 +101,7 @@ class InicioViewModel(
     fun dispararAtualizacao(aoSincronizar: (suspend () -> Unit)? = null) {
         _uiState.update { it.copy(emCarregamento = true) }
         viewModelScope.launch {
-            delay(600) // Transição suave de carregamento
+            delay(600.milliseconds) // Transição suave de carregamento
             aoSincronizar?.invoke()
             configuracaoRepository?.registarAtualizacao()
             atualizarEstado()
@@ -112,5 +121,21 @@ class InicioViewModel(
      */
     fun ligarSaude24(plataforma: ServicosDispositivo) {
         plataforma.ligarSaude24()
+    }
+
+    /**
+     * Define o perfil acompanhado ativo no ecrã de início.
+     */
+    fun definirPerfilCuidado(indice: Int) {
+        perfilRepository.definirPerfilCuidado(indice)
+        atualizarEstado()
+    }
+
+    /**
+     * Alterna o modo cuidador no ecrã de início.
+     */
+    fun atualizarModoCuidador(ativo: Boolean) {
+        perfilRepository.atualizarModoCuidador(ativo)
+        atualizarEstado()
     }
 }

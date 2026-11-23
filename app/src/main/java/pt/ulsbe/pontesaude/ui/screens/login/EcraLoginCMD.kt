@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.login
 
 import androidx.compose.animation.AnimatedVisibility
@@ -89,6 +91,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.R
@@ -139,9 +142,9 @@ fun EcraLoginCMD(
     var mostrarAjuda by remember { mutableStateOf(false) }
 
     // Sincronizar seleção se um perfil for apagado ou atualizado no Firestore em tempo real
-    LaunchedEffect(perfilRepository?.todosOsPerfis?.size ?: 0) {
-        if (perfilRepository != null && perfilRepository.todosOsPerfis.isNotEmpty() && perfilRepository.todosOsPerfis.none { it.id == perfilEscolhidoId }) {
-            perfilRepository.todosOsPerfis.firstOrNull()?.let { primeiro ->
+    LaunchedEffect(perfisDemonstracao.size) {
+        if (perfisDemonstracao.isNotEmpty() && perfisDemonstracao.none { it.id == perfilEscolhidoId }) {
+            perfisDemonstracao.firstOrNull()?.let { primeiro ->
                 perfilEscolhidoId = primeiro.id
                 telemovel = primeiro.telemovel.replace("+351 ", "")
                 nif = primeiro.nif
@@ -162,30 +165,27 @@ fun EcraLoginCMD(
         emProgresso = true
         escopo.launch {
             textoProgresso = "A ligar a Autenticação.gov..."
-            delay(300)
+            delay(300.milliseconds)
             val perfilAlvo = perfisDemonstracao.firstOrNull { it.id == idPerfil }
             val telPerfil = perfilAlvo?.telemovel?.trim().orEmpty()
             val ident: String = if (passo == 2 && modoId == ModoIdentificacao.TELEMOVEL) {
                 telemovel
             } else if (passo == 2) {
                 nif
-            } else if (telPerfil.isNotEmpty()) {
-                telPerfil
             } else {
-                idPerfil
+                telPerfil.ifEmpty { idPerfil }
             }
             textoProgresso = "A validar Chave Móvel Digital..."
             pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD.autenticarComCMD(ident)
-            delay(350)
+            delay(350.milliseconds)
             textoProgresso = "A carregar ficha de utente do SNS..."
             sincronizador?.sincronizarComFirestore()
-            delay(300)
+            delay(300.milliseconds)
             emProgresso = false
             if (viewModel != null) {
                 viewModel.selecionarPerfil(idPerfil)
                 viewModel.concluirAutenticacao(aoAutenticar, ident)
             } else {
-                perfilRepository?.iniciarSessaoCMD(idPerfil, ident)
                 aoAutenticar(idPerfil)
             }
         }
@@ -285,7 +285,7 @@ fun EcraLoginCMD(
                             shape = RoundedCornerShape(22.dp),
                             color = Color.White,
                             shadowElevation = 8.dp,
-                            border = androidx.compose.foundation.BorderStroke(2.dp, Color.White.copy(alpha = 0.85f)),
+                            border = BorderStroke(2.dp, Color.White.copy(alpha = 0.85f)),
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -338,7 +338,7 @@ fun EcraLoginCMD(
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = Color.White.copy(alpha = 0.14f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -597,7 +597,7 @@ fun EcraLoginCMD(
                                     Surface(
                                         shape = RoundedCornerShape(16.dp),
                                         color = Marca.copy(alpha = 0.45f),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, MarcaClaro.copy(alpha = 0.4f)),
+                                        border = BorderStroke(1.dp, MarcaClaro.copy(alpha = 0.4f)),
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
                                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -895,8 +895,11 @@ fun EcraLoginCMD(
                                             IconButton(
                                                 onClick = {
                                                     escopo.launch {
-                                                        perfilRepository?.apagarPerfil(perfil.id)
-                                                        viewModel?.recarregar()
+                                                        if (viewModel != null) {
+                                                            viewModel.apagarPerfil(perfil.id)
+                                                        } else {
+                                                            perfilRepository?.apagarPerfil(perfil.id)
+                                                        }
                                                         val restante = perfisDemonstracao.firstOrNull { it.id != perfil.id }
                                                         perfilEscolhidoId = restante?.id ?: "1"
                                                         if (restante != null) {
@@ -927,14 +930,17 @@ fun EcraLoginCMD(
                                     mensagemSucesso = null
                                     escopo.launch {
                                         try {
-                                            val criado = perfilRepository?.criarPerfilAleatorio()
-                                            viewModel?.recarregar()
-                                            if (criado != null) {
-                                                perfilEscolhidoId = criado.id
-                                                telemovel = criado.telemovel.replace("+351 ", "")
-                                                nif = criado.nif
-                                                pinCMD = "1234"
-                                                mensagemSucesso = "Perfil '${criado.nome}' gerado pela IA com sucesso!"
+                                            if (viewModel != null) {
+                                                viewModel.criarPerfilAleatorio()
+                                            } else {
+                                                val criado = perfilRepository?.criarPerfilAleatorio()
+                                                if (criado != null) {
+                                                    perfilEscolhidoId = criado.id
+                                                    telemovel = criado.telemovel.replace("+351 ", "")
+                                                    nif = criado.nif
+                                                    pinCMD = "1234"
+                                                    mensagemSucesso = "Perfil '${criado.nome}' gerado pela IA com sucesso!"
+                                                }
                                             }
                                         } catch (e: Exception) {
                                             mensagemSucesso = "Erro ao criar perfil: ${e.localizedMessage}"
@@ -973,15 +979,18 @@ fun EcraLoginCMD(
                                         mensagemSucesso = null
                                         escopo.launch {
                                             try {
-                                                val apagados = perfilRepository?.apagarPerfisAleatorios() ?: 0
-                                                viewModel?.recarregar()
+                                                if (viewModel != null) {
+                                                    viewModel.limparPerfisDemonstracao()
+                                                } else {
+                                                    perfilRepository?.apagarPerfisAleatorios()
+                                                }
                                                 val rest = perfisDemonstracao.firstOrNull { it.id in setOf("1", "2") } ?: perfisDemonstracao.firstOrNull()
                                                 perfilEscolhidoId = rest?.id ?: "1"
                                                 if (rest != null) {
                                                     telemovel = rest.telemovel.replace("+351 ", "")
                                                     nif = rest.nif
                                                 }
-                                                mensagemSucesso = if (apagados > 0) "$apagados perfis eliminados do Firebase Auth e Firestore." else "Nenhum perfil de teste para apagar."
+                                                mensagemSucesso = "Perfis de teste eliminados com sucesso."
                                             } catch (e: Exception) {
                                                 mensagemSucesso = "Erro ao apagar perfis: ${e.localizedMessage}"
                                             } finally {

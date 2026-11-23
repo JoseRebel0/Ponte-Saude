@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.saude
 
 import androidx.lifecycle.ViewModel
@@ -48,6 +50,7 @@ data class SaudeUiState(
     val explicacaoIa: String? = null,
     val mensagemErro: String? = null,
     val mensagemSucesso: String? = null,
+    val modoCuidadorAtivo: Boolean = false,
 )
 
 /**
@@ -89,6 +92,7 @@ class SaudeViewModel(
                 videos = saudeRepository.videosBiblioteca.toList(),
                 recompensas = saudeRepository.catalogoRecompensas.toList(),
                 vouchers = saudeRepository.vouchersResgatados.toList(),
+                modoCuidadorAtivo = perfilRepository.modoCuidador,
             )
         }
         saudeRepository.sincronizarCatalogoFirestore {

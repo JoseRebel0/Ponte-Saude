@@ -1,3 +1,5 @@
+@file:Suppress("SpellCheckingInspection")
+
 package pt.ulsbe.pontesaude.ui.screens.medicacao
 
 import androidx.lifecycle.ViewModel
@@ -14,6 +16,7 @@ import pt.ulsbe.pontesaude.data.repository.NotaRepository
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Estado imutável da interface do Ecrã de Medicação e Receitas ([EcraMedicacao]).
@@ -91,7 +94,7 @@ class MedicacaoViewModel(
         _uiState.update { it.copy(emCarregamento = true) }
         viewModelScope.launch {
             aoSincronizar?.invoke()
-            delay(500)
+            delay(500.milliseconds)
             recarregar()
             _uiState.update { it.copy(emCarregamento = false) }
         }
