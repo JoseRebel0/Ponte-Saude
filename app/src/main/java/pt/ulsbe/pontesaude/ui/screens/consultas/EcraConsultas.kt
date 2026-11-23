@@ -113,8 +113,29 @@ fun EcraConsultas(
     var mostrarDialogoNovaConsulta by remember { mutableStateOf(false) }
     val selecionada = consultas.firstOrNull { it.id == idSelecionado } ?: consultas.firstOrNull()
 
+    // A permissão do calendário só é pedida aqui, uma vez, quando o utilizador abre as Consultas.
+    val contextoLocal = androidx.compose.ui.platform.LocalContext.current
+    var versaoPermissaoCalendario by remember { mutableStateOf(0) }
+    val lancadorCalendario = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { versaoPermissaoCalendario++ }
+    LaunchedEffect(agendaAtiva) {
+        val prefs = contextoLocal.getSharedPreferences("ponte_saude", android.content.Context.MODE_PRIVATE)
+        val emFalta = listOf(
+            android.Manifest.permission.READ_CALENDAR,
+            android.Manifest.permission.WRITE_CALENDAR,
+        ).filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(contextoLocal, it) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (agendaAtiva && emFalta.isNotEmpty() && !prefs.getBoolean("pediu_permissao_calendario", false)) {
+            prefs.edit().putBoolean("pediu_permissao_calendario", true).apply()
+            lancadorCalendario.launch(emFalta.toTypedArray())
+        }
+    }
+
     // Sincronização automática com o calendário nativo do telemóvel por defeito
-    LaunchedEffect(consultas, agendaAtiva) {
+    LaunchedEffect(consultas, agendaAtiva, versaoPermissaoCalendario) {
         if (viewModel != null) {
             viewModel.sincronizarComCalendario(plataforma)
         } else {

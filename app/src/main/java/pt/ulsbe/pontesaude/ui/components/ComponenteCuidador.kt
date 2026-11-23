@@ -509,7 +509,7 @@ fun DialogoAdicionarPessoaCuidada(
 
                                 Button(
                                     onClick = {
-                                        if (codigoSMS.trim() != codigoSmsGerado && codigoSMS.trim().length != 6) {
+                                        if (codigoSMS.trim() != codigoSmsGerado) {
                                             erroMensagem = "Código inválido. Por favor, introduza o código de 6 dígitos recebido por SMS."
                                             return@Button
                                         }

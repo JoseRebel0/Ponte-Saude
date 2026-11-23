@@ -296,30 +296,11 @@ class ServicosDispositivo(context: Context?) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            // Prioriza setAlarmClock para que o sistema Android ative o ícone de despertador
-            // na barra de estado e mostre o alarme no ecrã de bloqueio
+            // setAlarmClock mostra o ícone de despertador e NÃO precisa da permissão de alarmes exatos.
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (alarmManager.canScheduleExactAlarms()) {
-                        val alarmClockInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent)
-                        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-                    } else {
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.RTC_WAKEUP,
-                            cal.timeInMillis,
-                            pendingIntent,
-                        )
-                    }
-                } else {
-                    val alarmClockInfo = AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent)
-                    alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-                }
-            } catch (e: SecurityException) {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    cal.timeInMillis,
-                    pendingIntent,
-                )
+                alarmManager.setAlarmClock(AlarmManager.AlarmClockInfo(cal.timeInMillis, showPendingIntent), pendingIntent)
+            } catch (_: SecurityException) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pendingIntent)
             }
         }
     }
@@ -664,7 +645,7 @@ class ServicosDispositivo(context: Context?) {
     }
 
     /**
-     * Gera e guarda o documento PDF oficial com a lista completa de medicação do utente.
+     * Gera e guarda um PDF com a lista de medicação preenchida pelo utilizador (registo pessoal, não oficial).
      * Guarda nas Transferências / Downloads do telemóvel e disponibiliza o Uri do FileProvider para abertura imediata.
      */
     fun gerarEGuardarPdfMedicacao(
@@ -698,7 +679,7 @@ class ServicosDispositivo(context: Context?) {
 
             paint.textSize = 9f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            canvas.drawText("SNS · Serviço Nacional de Saúde | Registo Pessoal do Utente", 28f, 68f, paint)
+            canvas.drawText("Registo pessoal do utente · não é um documento clínico oficial", 28f, 68f, paint)
 
             // 2. Caixa de Identificação do Utente
             var yAtual = 100f
@@ -832,7 +813,8 @@ class ServicosDispositivo(context: Context?) {
             val nomeFicheiro = "Guia_Medicacao_${nomeSanitizado}.pdf"
 
             // 1) Guardar na cache para partilha / abertura imediata
-            val ficheiroLocal = File(ctx.cacheDir, nomeFicheiro)
+            val pastaPdf = File(ctx.cacheDir, "pdf").apply { mkdirs() }
+            val ficheiroLocal = File(pastaPdf, nomeFicheiro)
             FileOutputStream(ficheiroLocal).use { fos ->
                 documento.writeTo(fos)
             }
@@ -926,7 +908,8 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
         if (!config.agendaEAlarmesAtivos && !config.notificacoesAtivas) return
 
         val db = BaseDadosLocal.obterInstancia(context)
-        val med = db.medicamentoDao().obterPorId(id)
+        // O id do alarme é (id do medicamento * 100 + índice do horário): procura nos dois formatos
+        val med = db.medicamentoDao().obterPorId(id) ?: db.medicamentoDao().obterPorId(id / 100)
         // Se o medicamento já não existir ou estiver desativado individualmente, cancela
         if (med != null && !med.ativo) return
 
@@ -944,6 +927,38 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
             val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
             servicos.agendarAlarmeMedicacao(id, nome, dose, h, m)
+        }
+    }
+}
+
+/**
+ * Volta a agendar os alarmes de medicação depois de reiniciar o telemóvel ou atualizar a app
+ * (o Android apaga os alarmes quando o aparelho reinicia).
+ */
+class ReiniciarAlarmesReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val acao = intent.action
+        if (acao != Intent.ACTION_BOOT_COMPLETED && acao != Intent.ACTION_MY_PACKAGE_REPLACED) return
+
+        val config = ConfiguracaoRepository(context)
+        if (!config.agendaEAlarmesAtivos) return
+
+        val prefs = context.getSharedPreferences("ponte_saude", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("cmd_autenticado", false)) return
+        val idSessao = prefs.getString("cmd_utente_id", null) ?: return
+
+        val servicos = ServicosDispositivo(context)
+        runCatching {
+            BaseDadosLocal.obterInstancia(context).medicamentoDao().obterPorPerfil(idSessao)
+                .filter { it.ativo }
+                .forEach { med ->
+                    med.hora.split(",", ";", "·").map { it.trim() }.filter { it.isNotEmpty() }.forEachIndexed { idx, horaStr ->
+                        val partes = horaStr.split(":")
+                        val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
+                        val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
+                        servicos.agendarAlarmeMedicacao(med.id * 100L + idx, med.nome, med.finalidade, h, m)
+                    }
+                }
         }
     }
 }

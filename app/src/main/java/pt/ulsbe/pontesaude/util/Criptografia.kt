@@ -10,14 +10,12 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Módulo de Criptografia e Proteção de Dados Pessoais (RGPD).
+ * Compatibilidade com dados antigos.
  *
- * Aplica cifra AES-256-GCM aos dados pessoais de identificação do utente
- * (NIF, Cartão de Cidadão, Número SNS, contactos e data de nascimento)
- * antes da sincronização com a cloud.
- *
- * Os dados clínicos essenciais (sangue, alergias, consultas, medicação e notas)
- * mantêm-se acessíveis para o acompanhamento clínico.
+ * ATENÇÃO: isto é apenas ofuscação, NÃO é segurança real: a chave está no código da aplicação,
+ * por isso qualquer pessoa com a app consegue decifrar. A app já não envia dados de identificação
+ * para a cloud (ficam só no telemóvel), por isso [cifrar] deixou de ser usada ao gravar. [decifrar]
+ * mantém-se só para ler documentos antigos que ainda tenham o prefixo "ENC:".
  */
 object Criptografia {
 
