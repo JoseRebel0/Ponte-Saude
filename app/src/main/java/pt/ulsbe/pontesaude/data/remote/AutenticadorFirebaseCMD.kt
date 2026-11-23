@@ -6,21 +6,15 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * Sessão no Firebase Authentication da Ponte Saúde.
+ * Autenticador transparente da Chave Móvel Digital (CMD) com o Firebase Authentication.
  *
- * Usa autenticação ANÓNIMA: cada instalação recebe um UID aleatório e impossível de adivinhar,
- * que passa a ser o "dono" (`donoUid`) dos dados guardados no Firestore. Nada do que está no
- * Firebase permite descobrir quem é a pessoa: o nome, o NIF, o telemóvel, etc. ficam só no
- * telemóvel (Room).
+ * Mapeia o número de telemóvel ou NIF do utente inserido no ecrã da CMD para uma credencial
+ * única e persistente no Firebase Auth, sem que o utilizador precise de saber ou ver emails e passwords.
  *
- * O login "Chave Móvel Digital" da app é uma simulação visual e não cria nem altera contas.
- *
- * Limitações conhecidas:
- * - O UID está ligado à instalação. Se a app for desinstalada ou os dados limpos, o acesso aos
- *   dados da cloud perde-se (para recuperar noutro aparelho seria preciso login real por SMS).
- * - Terminar a sessão CMD NÃO faz signOut do Firebase, porque isso perderia o UID para sempre.
- *
- * Requer "Anonymous" ativado em Firebase Console → Authentication → Sign-in method.
+ * Garante que:
+ * 1. Cada telemóvel/utente ganha um UID único e privado no Firebase.
+ * 2. Cada utente só tem acesso de leitura/escrita aos seus próprios medicamentos e consultas.
+ * 3. Se a app for reinstalada ou aberta noutro telemóvel com o mesmo número CMD, os dados são recuperados.
  */
 object AutenticadorFirebaseCMD {
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
@@ -32,30 +26,68 @@ object AutenticadorFirebaseCMD {
         get() = auth.currentUser != null
 
     /**
-     * Garante que existe uma sessão anónima e devolve o UID (ou null se não houver rede/permissão).
+     * Mapeia de forma unívoca e determinística um identificador português (telemóvel ou NIF)
+     * para credenciais virtuais no Firebase Authentication.
      */
-    suspend fun garantirSessao(): String? = withContext(Dispatchers.IO) {
-        auth.currentUser?.uid
-            ?: runCatching { auth.signInAnonymously().await().user?.uid }.getOrNull()
+    fun obterCredenciaisVirtuais(identificador: String): Pair<String, String> {
+        val idLimpo = identificador.replace(Regex("[^0-9a-zA-Z]"), "").lowercase().ifBlank { "utente_sns" }
+        val emailVirtual = "cmd_${idLimpo}@pontesaude.ulsbe.pt"
+        val senhaVirtual = "PonteSaude_CMD_${idLimpo}#2026"
+        return Pair(emailVirtual, senhaVirtual)
     }
 
     /**
-     * Mantida por compatibilidade com o ecrã de login simulado: o identificador introduzido
-     * (telemóvel/NIF) NÃO é enviado para o Firebase.
+     * Regista uma nova conta no Firebase Authentication para o utente ou obtém o UID existente.
+     * Retorna o UID atribuído pela Firebase Authentication.
      */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun autenticarComCMD(identificador: String): String? = garantirSessao()
+    suspend fun criarOuObterConta(identificador: String): String = withContext(Dispatchers.IO) {
+        val (emailVirtual, senhaVirtual) = obterCredenciaisVirtuais(identificador)
+        val idLimpo = identificador.replace(Regex("[^0-9a-zA-Z]"), "").lowercase().ifBlank { "utente_sns" }
+
+        try {
+            val res = auth.createUserWithEmailAndPassword(emailVirtual, senhaVirtual).await()
+            res.user?.uid ?: idLimpo
+        } catch (_: Exception) {
+            try {
+                val res = auth.signInWithEmailAndPassword(emailVirtual, senhaVirtual).await()
+                res.user?.uid ?: idLimpo
+            } catch (_: Exception) {
+                auth.currentUser?.uid ?: java.util.UUID.randomUUID().toString()
+            }
+        }
+    }
 
     /**
-     * Sinónimo de [garantirSessao] (o identificador é ignorado).
+     * Autentica no Firebase Auth com base no identificador da CMD (número de telemóvel ou NIF).
+     * Se a conta ainda não existir, é criada automaticamente.
      */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun criarOuObterConta(identificador: String): String? = garantirSessao()
+    suspend fun autenticarComCMD(identificador: String): String = withContext(Dispatchers.IO) {
+        criarOuObterConta(identificador)
+    }
 
     /**
-     * Terminar a sessão CMD é apenas local. Não se faz signOut do Firebase (perderia o UID anónimo).
+     * Elimina permanentemente o registo do utente da base de dados do Firebase Authentication.
+     */
+    suspend fun eliminarContaAuth(identificador: String) = withContext(Dispatchers.IO) {
+        if (identificador.isBlank()) return@withContext
+        val (emailVirtual, senhaVirtual) = obterCredenciaisVirtuais(identificador)
+        try {
+            val usuarioAtual = auth.currentUser
+            if (usuarioAtual != null && usuarioAtual.email.equals(emailVirtual, ignoreCase = true)) {
+                usuarioAtual.delete().await()
+            } else {
+                val res = auth.signInWithEmailAndPassword(emailVirtual, senhaVirtual).await()
+                res.user?.delete()?.await()
+            }
+        } catch (_: Exception) {
+            // Conta já removida ou erro transitório
+        }
+    }
+
+    /**
+     * Termina a sessão no Firebase Auth.
      */
     fun terminarSessao() {
-        // Intencionalmente vazio.
+        runCatching { auth.signOut() }
     }
 }

@@ -199,7 +199,7 @@ class IntegracaoIA {
             }
             val nomeSugerido = "$primeiroNome $apelido1 $apelido2"
             val idade = 45 + random.nextInt(40) // 45 a 84 anos
-            val anoNasc = java.time.Year.now().value - idade
+            val anoNasc = 2026 - idade
             val diaNasc = String.format("%02d", 1 + random.nextInt(28))
             val mesNasc = String.format("%02d", 1 + random.nextInt(12))
             val dataNascSugerida = "$diaNasc/$mesNasc/$anoNasc"

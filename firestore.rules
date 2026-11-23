@@ -2,55 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. Catálogo institucional público (só leitura)
+    // 1. Catálogo Institucional Público (Apenas Leitura para Qualquer Utente)
     match /modulos_saude/{docId} {
       allow read: if true;
       allow write: if false;
     }
+
     match /videos_biblioteca/{docId} {
       allow read: if true;
       allow write: if false;
     }
+
     match /recompensas/{docId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // 2. Perfis: dados clínicos ligados a um id aleatório (sem identificação pessoal).
-    //    donoUid = UID anónimo do Firebase Auth. cuidadoresUids = UIDs autorizados (preenchido
-    //    pelo fluxo de convite). Cada instalação só vê os seus perfis e os que lhe foram partilhados.
+    // 2. Perfis e Dados Clínicos Privados (Apenas o Próprio Dono ou Cuidadores Autorizados)
     match /perfis/{idPerfil} {
-      // As consultas da app filtram por donoUid ou por cuidadoresUids, por isso a regra tem de
-      // usar exatamente esses campos (o dono é avaliado primeiro).
+      // Leitura permitida se o utilizador for o dono ou cuidador autorizado
       allow read: if request.auth != null && (
         resource.data.donoUid == request.auth.uid ||
-        request.auth.uid in resource.data.cuidadoresUids
+        request.auth.uid in resource.data.cuidadoresIds
       );
 
-      // Criar: o dono tem de ser o próprio utilizador
-      allow create: if request.auth != null
-        && request.resource.data.donoUid == request.auth.uid;
+      // Criação permitida vinculando obrigatoriamente o seu próprio UID como dono
+      allow create: if request.auth != null && request.resource.data.donoUid == request.auth.uid;
 
-      // Atualizar: o dono pode alterar tudo menos o dono; um cuidador pode alterar dados
-      // clínicos mas não o dono nem a lista de cuidadores.
-      allow update: if request.auth != null
-        && request.resource.data.donoUid == resource.data.donoUid
-        && (
-          resource.data.donoUid == request.auth.uid ||
-          (
-            request.auth.uid in resource.data.get('cuidadoresUids', []) &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['donoUid', 'cuidadoresUids'])
-          )
-        );
+      // Atualização ou eliminação apenas pelo dono ou cuidador autorizado
+      allow update, delete: if request.auth != null && (
+        resource.data.donoUid == request.auth.uid ||
+        request.auth.uid in resource.data.cuidadoresIds
+      );
 
-      // Apagar: só o dono
-      allow delete: if request.auth != null && resource.data.donoUid == request.auth.uid;
-
-      // Subcoleções (medicamentos, consultas, notas): dono ou cuidador autorizado
+      // Subcoleções Privadas (Medicamentos, Consultas, Notas)
       match /{subcolecao}/{docSubId} {
         allow read, write: if request.auth != null && (
           get(/databases/$(database)/documents/perfis/$(idPerfil)).data.donoUid == request.auth.uid ||
-          request.auth.uid in get(/databases/$(database)/documents/perfis/$(idPerfil)).data.get('cuidadoresUids', [])
+          request.auth.uid in get(/databases/$(database)/documents/perfis/$(idPerfil)).data.cuidadoresIds
         );
       }
     }

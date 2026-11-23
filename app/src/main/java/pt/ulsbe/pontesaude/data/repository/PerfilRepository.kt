@@ -150,12 +150,10 @@ class PerfilRepository(
 
     suspend fun criarPerfilAleatorio(): Perfil {
         val telemovelGerado = gerarTelemovelAleatorio()
-        // Garante a sessão anónima (não muda de conta). O id do perfil é aleatório e independente do UID.
-        AutenticadorFirebaseCMD.garantirSessao()
-        val idNovo = "p" + java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        val uid = AutenticadorFirebaseCMD.criarOuObterConta(telemovelGerado)
 
         // Gerar perfil clínico completo 100% dinâmico com IA (Gemini)
-        val novo = integracaoIa.gerarPerfilClinicoComIA(id = idNovo, telemovel = telemovelGerado).getOrThrow()
+        val novo = integracaoIa.gerarPerfilClinicoComIA(id = uid, telemovel = telemovelGerado).getOrThrow()
 
         val online = estaOnline()
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), pendente = !online)
@@ -181,7 +179,7 @@ class PerfilRepository(
         tipoSanguineo: String = "A+",
         alergias: String = "Sem alergias conhecidas",
     ): Perfil {
-        val idCuidado = "c" + java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        val idCuidado = "cuidado_${System.currentTimeMillis()}"
         val nomeTrim = nome.trim()
         val partes = nomeTrim.split(" ").filter { it.isNotBlank() }
         val nomeCurto = if (partes.size > 1) "${partes.first()} ${partes.last()}" else nomeTrim
@@ -289,6 +287,9 @@ class PerfilRepository(
     }
 
     suspend fun apagarPerfil(idPerfil: String) {
+        val perfil = todosOsPerfis.find { it.id == idPerfil }
+        val identificadorParaAuth = perfil?.telemovel?.ifBlank { idPerfil } ?: idPerfil
+
         todosOsPerfis.removeAll { it.id == idPerfil }
         dbLocal.perfilDao().apagar(idPerfil)
         dbLocal.medicamentoDao().apagarPorPerfil(idPerfil)
@@ -306,6 +307,9 @@ class PerfilRepository(
         if (estaOnline()) {
             runCatching {
                 clienteFirestore.apagarPerfil(idPerfil)
+            }
+            runCatching {
+                AutenticadorFirebaseCMD.eliminarContaAuth(identificadorParaAuth)
             }
         }
         atualizarListaPessoasCuidadas()
@@ -333,6 +337,12 @@ class PerfilRepository(
         if (estaOnline()) {
             runCatching {
                 clienteFirestore.apagarPerfisEmMassa(idsParaApagar)
+            }
+            for (p in perfisParaApagar) {
+                runCatching {
+                    val ident = p.telemovel.ifBlank { p.id }
+                    AutenticadorFirebaseCMD.eliminarContaAuth(ident)
+                }
             }
         }
         atualizarListaPessoasCuidadas()

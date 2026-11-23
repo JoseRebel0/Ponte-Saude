@@ -74,6 +74,7 @@ class AppContainer(context: Context) {
 
     init {
         carregarTudoDoRoomESincronizar()
+        iniciarEscutaTempoRealFirestore()
     }
 
     private fun carregarTudoDoRoomESincronizar() {
@@ -81,9 +82,10 @@ class AppContainer(context: Context) {
             saude.carregarCatalogoLocal()
             perfil.carregarPerfisLocais()
 
-            // Sessão anónima (UID aleatório = dono dos dados na cloud) e só depois a escuta em tempo real.
-            runCatching { AutenticadorFirebaseCMD.garantirSessao() }
-            iniciarEscutaTempoRealFirestore()
+            val ident = perfil.identificadorCMD
+            if (ident.isNotBlank() && !AutenticadorFirebaseCMD.estaAutenticado) {
+                runCatching { AutenticadorFirebaseCMD.autenticarComCMD(ident) }
+            }
 
             for (p in perfil.todosOsPerfis) {
                 medicacao.carregarDadosLocais(p.id)
@@ -153,40 +155,14 @@ class AppContainer(context: Context) {
             }
         }
 
-        // A identificação (nome, NIF, telemóvel, ...) nunca vem do Firestore: usa-se sempre a do Room.
-        val locaisPorId: Map<String, Perfil> = (dbLocal.perfilDao().obterTodos() ?: emptyList())
-            .map { entity: PerfilEntity -> entity.paraModelo() }
-            .associateBy { it.id }
-        val remotosCompletos = clienteFirestore.carregarTodosOsPerfis().getOrNull().orEmpty().map { item ->
-            val local = locaisPorId[item.perfil.id]
-            if (local == null) {
-                item
-            } else {
-                item.copy(
-                    perfil = item.perfil.copy(
-                        nome = local.nome,
-                        nomeCurto = local.nomeCurto,
-                        relacao = local.relacao,
-                        iniciais = local.iniciais,
-                        nif = local.nif,
-                        numeroUtente = local.numeroUtente,
-                        cartaoCidadao = local.cartaoCidadao,
-                        dataNascimento = local.dataNascimento,
-                        telemovel = local.telemovel,
-                        email = local.email,
-                    ),
-                )
-            }
-        }
+        val remotosCompletos = clienteFirestore.carregarTodosOsPerfis().getOrNull().orEmpty()
         val remotos = remotosCompletos.map { it.perfil }
 
         withContext(Dispatchers.Main) {
             if (perfil.autenticado) {
                 if (remotos.isNotEmpty()) {
-                    val idsRemotos = remotos.map { it.id }.toSet()
-                    val soLocais = locaisPorId.values.filter { it.id !in idsRemotos }
                     perfil.todosOsPerfis.clear()
-                    perfil.todosOsPerfis.addAll(remotos + soLocais)
+                    perfil.todosOsPerfis.addAll(remotos)
                     perfil.atualizarListaPessoasCuidadas()
                 }
             } else {

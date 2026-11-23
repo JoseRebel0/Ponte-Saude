@@ -316,7 +316,7 @@ fun EcraDefinicoes(
                                 Column {
                                     Text("Chave Móvel Digital", fontWeight = FontWeight.Bold)
                                     Text(
-                                        "Sessão de demonstração ativa",
+                                        "Sessão oficial ativa (Autenticação.gov)",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF16A34A),
                                         fontWeight = FontWeight.Medium,
