@@ -149,21 +149,14 @@ class ApiPerfisRemoto(
             runCatching {
                 val uidAtual = AutenticadorFirebaseCMD.uidAtual
                 val docs = if (!uidAtual.isNullOrBlank()) {
-                    val snapDono = runCatching {
+                    val snapDono =
                         db.collection("perfis").whereEqualTo("donoUid", uidAtual).get().await()
-                    }.getOrNull()
-                    val snapCuidador = runCatching {
-                        db.collection("perfis").whereArrayContains("cuidadoresIds", uidAtual).get().await()
-                    }.getOrNull()
-                    val filtrados = ((snapDono?.documents.orEmpty()) + (snapCuidador?.documents.orEmpty())).distinctBy { it.id }
-                    if (filtrados.isNotEmpty()) {
-                        filtrados
-                    } else {
-                        runCatching { db.collection("perfis").get().await().documents }.getOrDefault(emptyList())
-                    }
+                    val snapCuidador =
+                        db.collection("perfis").whereArrayContains("cuidadoresIds", uidAtual).get()
+                            .await()
+                    (snapDono.documents + snapCuidador.documents).distinctBy { it.id }
                 } else {
-                    // Sem sessão iniciada (ecrã de login): carregar todos os perfis do Firestore para permitir seleção de teste
-                    runCatching { db.collection("perfis").get().await().documents }.getOrDefault(emptyList())
+                    emptyList()
                 }
                 val lista = mutableListOf<DadosPerfilRemoto>()
 

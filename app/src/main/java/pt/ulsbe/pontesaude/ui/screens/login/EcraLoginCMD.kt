@@ -141,26 +141,6 @@ fun EcraLoginCMD(
     var mensagemErro by remember { mutableStateOf<String?>(null) }
     var mostrarAjuda by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        viewModel?.recarregar()
-        if (sincronizador != null) {
-            escopo.launch {
-                runCatching {
-                    sincronizador.sincronizarComFirestore()
-                    perfilRepository?.carregarPerfisLocais()
-                    viewModel?.recarregar()
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(sincronizador?.estaASincronizarFirestore, sincronizador?.versaoSincronizacao) {
-        if (sincronizador?.estaASincronizarFirestore == false) {
-            perfilRepository?.carregarPerfisLocais()
-            viewModel?.recarregar()
-        }
-    }
-
     // Sincronizar seleção se um perfil for apagado ou atualizado no Firestore em tempo real
     LaunchedEffect(perfisDemonstracao.size) {
         if (perfisDemonstracao.isNotEmpty() && perfisDemonstracao.none { it.id == perfilEscolhidoId }) {

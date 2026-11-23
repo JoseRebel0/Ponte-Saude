@@ -122,7 +122,6 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
         } else if (!container.perfil.autenticado) {
             EcraLoginCMD(
                 viewModel = loginViewModel,
-                perfilRepository = container.perfil,
                 sincronizador = container,
                 aoAutenticar = { idPerfil ->
                     container.perfil.iniciarSessaoCMD(idPerfil)

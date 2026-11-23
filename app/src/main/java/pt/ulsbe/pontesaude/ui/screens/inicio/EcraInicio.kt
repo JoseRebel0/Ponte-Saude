@@ -144,7 +144,7 @@ fun EcraInicio(
                 Column(
                     Modifier
                         .background(Brush.verticalGradient(listOf(MarcaMedio, Color(0xFF0F3D9E))))
-                        .padding(start = 20.dp, end = 20.dp, top = 54.dp, bottom = 28.dp),
+                        .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 20.dp),
                 ) {
                     val modoCuidadorAtivo = uiState?.modoCuidadorAtivo ?: perfilRepository?.modoCuidador ?: false
                     if (modoCuidadorAtivo) {
