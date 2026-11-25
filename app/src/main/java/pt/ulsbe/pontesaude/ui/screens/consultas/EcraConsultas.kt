@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.EventBusy
@@ -53,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -311,7 +311,11 @@ fun EcraConsultas(
                                         },
                                         colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF065F46)),
                                     ) {
-                                        Icon(Icons.Rounded.CalendarMonth, null, modifier = Modifier.size(15.dp))
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_agenda_sns),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                        )
                                         Spacer(Modifier.width(4.dp))
                                         Text("Ver na Agenda", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                     }
@@ -486,7 +490,18 @@ fun EcraConsultas(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Requer Jejum prévio?", style = MaterialTheme.typography.bodyMedium)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_jejum),
+                                contentDescription = null,
+                                tint = MarcaMedio,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text("Requer Jejum prévio?", style = MaterialTheme.typography.bodyMedium)
+                        }
                         Switch(
                             checked = precisaJejum,
                             onCheckedChange = { precisaJejum = it },

@@ -31,14 +31,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.HelpOutline
-import androidx.compose.material.icons.automirrored.rounded.Message
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Lock
@@ -49,7 +47,6 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
-import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -434,7 +431,7 @@ fun EcraLoginCMD(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Rounded.VpnKey,
+                                            painter = painterResource(R.drawable.ic_cmd),
                                             contentDescription = null,
                                             tint = Color.White,
                                             modifier = Modifier.size(24.dp),
@@ -634,7 +631,7 @@ fun EcraLoginCMD(
                                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
-                                                    Icons.AutoMirrored.Rounded.Message,
+                                                    painter = painterResource(R.drawable.ic_sms_codigo),
                                                     contentDescription = null,
                                                     tint = MarcaClaro,
                                                     modifier = Modifier.size(18.dp),
@@ -1150,7 +1147,11 @@ fun EcraLoginCMD(
                                 colors = ButtonDefaults.buttonColors(containerColor = MarcaProfundo),
                                 enabled = perfisDemonstracao.isNotEmpty(),
                             ) {
-                                Icon(Icons.Rounded.Fingerprint, contentDescription = null)
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_cmd),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 val nomeAtual = perfisDemonstracao.find { it.id == perfilEscolhidoId }?.nomeCurto ?: perfisDemonstracao.firstOrNull()?.nomeCurto ?: "Utente"
                                 Text("Entrar como $nomeAtual (Teste Rápido)", fontWeight = FontWeight.Bold)

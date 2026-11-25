@@ -13,6 +13,7 @@ import pt.ulsbe.pontesaude.data.local.deserializarVouchers
 import pt.ulsbe.pontesaude.data.local.paraEntidade
 import pt.ulsbe.pontesaude.data.local.paraModelo
 import pt.ulsbe.pontesaude.data.local.serializarVouchers
+import pt.ulsbe.pontesaude.data.remote.AutenticadorFirebaseCMD
 import pt.ulsbe.pontesaude.data.remote.ClienteFirestore
 import pt.ulsbe.pontesaude.data.remote.IntegracaoIA
 import pt.ulsbe.pontesaude.model.ModuloSaude
@@ -127,6 +128,9 @@ class SaudeRepository(
         if (estaOnline()) {
             scope.launch {
                 runCatching {
+                    if (!AutenticadorFirebaseCMD.estaAutenticado) {
+                        runCatching { AutenticadorFirebaseCMD.garantirSessaoAnonima() }
+                    }
                     val modsRemotos = clienteFirestore.obterModulosSaude()
                     val vidsRemotos = clienteFirestore.obterVideosBiblioteca()
                     val recompsRemotas = clienteFirestore.obterCatalogoRecompensas()

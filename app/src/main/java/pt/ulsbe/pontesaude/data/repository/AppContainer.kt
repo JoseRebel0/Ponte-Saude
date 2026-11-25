@@ -85,6 +85,8 @@ class AppContainer(context: Context) {
                 runCatching { AutenticadorFirebaseCMD.garantirSessaoAnonima() }
             }
 
+            saude.sincronizarCatalogoFirestore()
+
             withContext(Dispatchers.Main) {
                 iniciarEscutaTempoRealFirestore()
             }
@@ -128,7 +130,7 @@ class AppContainer(context: Context) {
     }
 
     suspend fun sincronizarComFirestore() {
-        // Sincronizar catálogo de módulos de saúde, vídeos e recompensas
+        // Sincronizar catálogo de módulos de saúde, vídeos e recompensas com o Firestore
         runCatching {
             val modulosRemotos = clienteFirestore.obterModulosSaude()
             val videosRemotos = clienteFirestore.obterVideosBiblioteca()

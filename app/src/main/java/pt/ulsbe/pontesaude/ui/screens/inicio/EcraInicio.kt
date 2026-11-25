@@ -70,7 +70,7 @@ import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
-private data class Atalho(val rotulo: String, @DrawableRes val iconeRes: Int, val acao: () -> Unit)
+private data class Atalho(val rotulo: String, @param:DrawableRes val iconeRes: Int, val acao: () -> Unit)
 
 /**
  * Ecrã Principal da aplicação com o Cartão de Emergência, atalhos rápidos e próxima consulta.

@@ -40,7 +40,6 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddAPhoto
 import androidx.compose.material.icons.rounded.Alarm
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
@@ -89,6 +88,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -846,7 +846,7 @@ fun EcraMedicacao(
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 ) {
                                     Icon(
-                                        Icons.Rounded.AutoAwesome,
+                                        painter = painterResource(R.drawable.ic_ia_bula),
                                         contentDescription = null,
                                         tint = MarcaMedio,
                                         modifier = Modifier.size(16.dp),
@@ -1429,7 +1429,7 @@ fun EcraMedicacao(
             },
             icon = {
                 Icon(
-                    Icons.Rounded.AutoAwesome,
+                    painter = painterResource(R.drawable.ic_ia_bula),
                     contentDescription = null,
                     tint = MarcaMedio,
                     modifier = Modifier.size(36.dp),
