@@ -54,7 +54,7 @@ class ApiPerfisRemoto(
             )
         }
 
-        val donoUid = AutenticadorFirebaseCMD.uidAtual ?: perfil.id
+        val donoUid = AutenticadorFirebaseCMD.uidAtual ?: AutenticadorFirebaseCMD.garantirSessaoAnonima()
         val cuidadoresValidos =
             perfil.cuidadoresIds.filter { it != perfil.id && it != donoUid }.distinct()
         val cuidadosValidos = perfil.perfisCuidadosIds.filter { it != perfil.id }.distinct()
@@ -147,7 +147,7 @@ class ApiPerfisRemoto(
     suspend fun carregarPerfisFirestore(): Result<List<DadosPerfilRemoto>> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val uidAtual = AutenticadorFirebaseCMD.uidAtual
+                val uidAtual = AutenticadorFirebaseCMD.uidAtual ?: AutenticadorFirebaseCMD.garantirSessaoAnonima()
                 val docs = if (!uidAtual.isNullOrBlank()) {
                     val snapDono =
                         db.collection("perfis").whereEqualTo("donoUid", uidAtual).get().await()

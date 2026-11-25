@@ -150,10 +150,11 @@ class PerfilRepository(
 
     suspend fun criarPerfilAleatorio(): Perfil {
         val telemovelGerado = gerarTelemovelAleatorio()
-        val uid = AutenticadorFirebaseCMD.criarOuObterConta(telemovelGerado)
+        AutenticadorFirebaseCMD.garantirSessaoAnonima()
+        val idPerfil = "p_" + java.util.UUID.randomUUID().toString().replace("-", "").take(16)
 
         // Gerar perfil clínico completo 100% dinâmico com IA (Gemini)
-        val novo = integracaoIa.gerarPerfilClinicoComIA(id = uid, telemovel = telemovelGerado).getOrThrow()
+        val novo = integracaoIa.gerarPerfilClinicoComIA(id = idPerfil, telemovel = telemovelGerado).getOrThrow()
 
         val online = estaOnline()
         val pEnt = novo.paraEntidade(50, emptyList(), emptyList(), emptyList(), emptyList(), pendente = !online)
