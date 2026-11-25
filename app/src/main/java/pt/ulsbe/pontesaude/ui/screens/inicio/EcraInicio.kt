@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -141,10 +144,12 @@ fun EcraInicio(
             modifier = Modifier.fillMaxSize(),
         ) {
             item {
+                val paddingStatusBars = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                val espacamentoTopo = if (paddingStatusBars > 0.dp) paddingStatusBars + 14.dp else 46.dp
                 Column(
                     Modifier
                         .background(Brush.verticalGradient(listOf(MarcaMedio, Color(0xFF0F3D9E))))
-                        .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 20.dp),
+                        .padding(start = 20.dp, end = 20.dp, top = espacamentoTopo, bottom = 20.dp),
                 ) {
                     val modoCuidadorAtivo = uiState?.modoCuidadorAtivo ?: perfilRepository?.modoCuidador ?: false
                     if (modoCuidadorAtivo) {

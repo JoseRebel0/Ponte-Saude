@@ -27,7 +27,6 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -230,22 +229,6 @@ fun ChecklistInterativa(
                                 contentDescription = "Ouvir tarefas da checklist",
                                 tint = MarcaMedio,
                                 modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    if (concluidos > 0) {
-                        IconButton(
-                            onClick = {
-                                marcados.clear()
-                                sincronizarMarcados()
-                            },
-                            modifier = Modifier.size(34.dp),
-                        ) {
-                            Icon(
-                                Icons.Rounded.RestartAlt,
-                                contentDescription = "Reiniciar checklist",
-                                tint = Atenuado,
-                                modifier = Modifier.size(19.dp),
                             )
                         }
                     }

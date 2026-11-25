@@ -379,6 +379,48 @@ class ServicosDispositivo(context: Context?) {
         }
     }
 
+    /**
+     * Agenda múltiplos alarmes diários no relógio nativo do telemóvel com intervalo sequencial
+     * para garantir que todos os horários são registados sem colisão de Intents.
+     * Agrupa e identifica todos os alarmes sob o prefixo "Ponte Saúde: Nome (HH:MM)" com repetição diária.
+     */
+    fun sincronizarAlarmesNoRelogio(medicamento: Medicamento, aoConcluir: (() -> Unit)? = null) {
+        val ctx = contextoApp ?: return
+        val horarios = medicamento.listaHorarios
+        if (horarios.isEmpty()) {
+            aoConcluir?.invoke()
+            return
+        }
+
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        horarios.forEachIndexed { index, horaStr ->
+            val partes = horaStr.split(":")
+            val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
+            val horaFormatada = String.format(Locale.getDefault(), "%02d:%02d", h, m)
+            val etiqueta = "Ponte Saúde: ${medicamento.nome} ($horaFormatada)"
+
+            // Escalonar cada alarme com 750ms de intervalo para o Relógio do Android processar individualmente
+            handler.postDelayed({
+                runCatching {
+                    definirAlarmeRelogio(h, m, etiqueta)
+                }
+            }, index * 750L)
+        }
+
+        // Restaura a aplicação Ponte Saúde após o último alarme ser registado
+        val tempoTotal = horarios.size * 750L + 500L
+        handler.postDelayed({
+            runCatching {
+                val voltaAppIntent = Intent(ctx, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                ctx.startActivity(voltaAppIntent)
+                aoConcluir?.invoke()
+            }
+        }, tempoTotal)
+    }
+
     fun definirAlarmeRelogio(hora: Int, minuto: Int, mensagem: String): Boolean {
         val ctx = contextoApp ?: return false
         return runCatching {
@@ -388,11 +430,12 @@ class ServicosDispositivo(context: Context?) {
                 putExtra(AlarmClock.EXTRA_MESSAGE, mensagem)
                 putExtra(AlarmClock.EXTRA_SKIP_UI, true)
                 putExtra(AlarmClock.EXTRA_VIBRATE, true)
+                // Repetição diária (todos os 7 dias da semana: Domingo a Sábado)
                 putExtra(
                     AlarmClock.EXTRA_DAYS,
                     arrayListOf(
-                        Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY,
-                        Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY,
+                        Calendar.SUNDAY, Calendar.MONDAY, Calendar.TUESDAY,
+                        Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY,
                     ),
                 )
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -412,6 +455,65 @@ class ServicosDispositivo(context: Context?) {
         }.getOrDefault(false)
     }
 
+    /**
+     * Localiza um calendário gravável no dispositivo ou cria automaticamente um calendário local
+     * "Ponte Saúde - ULSBE" para garantir que a inserção de consultas nunca falha por falta de conta.
+     */
+    fun obterOuCriarIdCalendario(ctx: Context): Long? {
+        val uriCalendarios = CalendarContract.Calendars.CONTENT_URI
+        val projecao = arrayOf(
+            CalendarContract.Calendars._ID,
+            CalendarContract.Calendars.IS_PRIMARY,
+            CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
+        )
+        var melhorId: Long? = null
+        try {
+            ctx.contentResolver.query(uriCalendarios, projecao, null, null, null)?.use { cursor ->
+                val idxId = cursor.getColumnIndex(CalendarContract.Calendars._ID)
+                val idxPrimary = cursor.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
+                val idxAccess = cursor.getColumnIndex(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idxId)
+                    val isPrimary = if (idxPrimary >= 0) cursor.getInt(idxPrimary) == 1 else false
+                    val access = if (idxAccess >= 0) cursor.getInt(idxAccess) else 0
+                    if (isPrimary && access >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) {
+                        return id
+                    }
+                    if (melhorId == null && access >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) {
+                        melhorId = id
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        if (melhorId != null) return melhorId
+
+        // Criar calendário local exclusivo para a aplicação Ponte Saúde
+        return try {
+            val uriSync = CalendarContract.Calendars.CONTENT_URI.buildUpon()
+                .appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true")
+                .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, "PonteSaude")
+                .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE, CalendarContract.ACCOUNT_TYPE_LOCAL)
+                .build()
+
+            val valores = ContentValues().apply {
+                put(CalendarContract.Calendars.ACCOUNT_NAME, "PonteSaude")
+                put(CalendarContract.Calendars.ACCOUNT_TYPE, CalendarContract.ACCOUNT_TYPE_LOCAL)
+                put(CalendarContract.Calendars.NAME, "Ponte Saúde - ULSBE")
+                put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, "Ponte Saúde (Consultas)")
+                put(CalendarContract.Calendars.CALENDAR_COLOR, 0xFF0D47A1.toInt())
+                put(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL, CalendarContract.Calendars.CAL_ACCESS_OWNER)
+                put(CalendarContract.Calendars.OWNER_ACCOUNT, "pontesaude@ulsbe.pt")
+                put(CalendarContract.Calendars.SYNC_EVENTS, 1)
+                put(CalendarContract.Calendars.VISIBLE, 1)
+            }
+            val novo = ctx.contentResolver.insert(uriSync, valores)
+            novo?.lastPathSegment?.toLongOrNull() ?: 1L
+        } catch (_: Exception) {
+            1L
+        }
+    }
+
     fun sincronizarConsultaNoCalendario(
         titulo: String,
         descricao: String,
@@ -426,25 +528,7 @@ class ServicosDispositivo(context: Context?) {
                 return false
             }
 
-            val uriCalendarios = CalendarContract.Calendars.CONTENT_URI
-            val projecao = arrayOf(CalendarContract.Calendars._ID, CalendarContract.Calendars.IS_PRIMARY)
-            var idCalendario: Long = 1
-            ctx.contentResolver.query(uriCalendarios, projecao, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idxId = cursor.getColumnIndex(CalendarContract.Calendars._ID)
-                    val idxPrimary = cursor.getColumnIndex(CalendarContract.Calendars.IS_PRIMARY)
-                    while (!cursor.isAfterLast) {
-                        val id = cursor.getLong(idxId)
-                        val primary = if (idxPrimary >= 0) cursor.getInt(idxPrimary) == 1 else false
-                        if (primary) {
-                            idCalendario = id
-                            break
-                        }
-                        idCalendario = id
-                        cursor.moveToNext()
-                    }
-                }
-            }
+            val idCalendario = obterOuCriarIdCalendario(ctx) ?: return false
 
             val diaInt = dia.toIntOrNull() ?: 15
             val mesInt = obterIndiceMes(mes)
@@ -457,6 +541,9 @@ class ServicosDispositivo(context: Context?) {
                 set(Calendar.MINUTE, 30)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)
+                if (before(Calendar.getInstance())) {
+                    add(Calendar.YEAR, 1)
+                }
             }
             val calFim = Calendar.getInstance().apply {
                 timeInMillis = calInicio.timeInMillis + 60 * 60 * 1000
@@ -563,20 +650,23 @@ class ServicosDispositivo(context: Context?) {
         }.getOrDefault(false)
     }
 
-    private fun obterIndiceMes(mes: String): Int = when (mes.uppercase().trim()) {
-        "JAN" -> 0
-        "FEV" -> 1
-        "MAR" -> 2
-        "ABR" -> 3
-        "MAI" -> 4
-        "JUN" -> 5
-        "JUL" -> 6
-        "AGO" -> 7
-        "SET" -> 8
-        "OUT" -> 9
-        "NOV" -> 10
-        "DEZ" -> 11
-        else -> Calendar.getInstance().get(Calendar.MONTH)
+    private fun obterIndiceMes(mes: String): Int {
+        val m = mes.trim().lowercase()
+        return when {
+            m.startsWith("jan") || m == "1" || m == "01" -> 0
+            m.startsWith("fev") || m == "2" || m == "02" -> 1
+            m.startsWith("mar") || m == "3" || m == "03" -> 2
+            m.startsWith("abr") || m == "4" || m == "04" -> 3
+            m.startsWith("mai") || m == "5" || m == "05" -> 4
+            m.startsWith("jun") || m == "6" || m == "06" -> 5
+            m.startsWith("jul") || m == "7" || m == "07" -> 6
+            m.startsWith("ago") || m == "8" || m == "08" -> 7
+            m.startsWith("set") || m == "9" || m == "09" -> 8
+            m.startsWith("out") || m == "10" -> 9
+            m.startsWith("nov") || m == "11" -> 10
+            m.startsWith("dez") || m == "12" -> 11
+            else -> Calendar.getInstance().get(Calendar.MONTH)
+        }
     }
 
     fun falar(texto: String) {
@@ -925,8 +1015,9 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
         // Só dispara se os alarmes ou notificações estiverem ativos
         if (!config.agendaEAlarmesAtivos && !config.notificacoesAtivas) return
 
+        val idReal = if (id >= 100L) id / 100L else id
         val db = BaseDadosLocal.obterInstancia(context)
-        val med = db.medicamentoDao().obterPorId(id)
+        val med = db.medicamentoDao().obterPorId(idReal)
         // Se o medicamento já não existir ou estiver desativado individualmente, cancela
         if (med != null && !med.ativo) return
 
@@ -939,7 +1030,7 @@ class AlarmeMedicacaoReceiver : BroadcastReceiver() {
         )
 
         // Se o medicamento ainda estiver ativo e os alarmes ligados, reagendar para o dia seguinte
-        if (med?.ativo == true && config.agendaEAlarmesAtivos) {
+        if ((med == null || med.ativo) && config.agendaEAlarmesAtivos) {
             val partes = hora.split(":")
             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
             val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
