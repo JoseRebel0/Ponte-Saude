@@ -177,10 +177,10 @@ class MedicacaoViewModel(
      * Consulta a IA do Google (Gemini) para explicar de forma simples para que serve o medicamento
      * e quais as precauções fundamentais a ter durante o tratamento.
      */
-    fun pedirExplicacaoIa(nome: String) {
+    fun pedirExplicacaoIa(nome: String, principioAtivo: String = "", finalidade: String = "") {
         _uiState.update { it.copy(aCarregarIa = true, explicacaoIa = null, mensagemErro = null) }
         viewModelScope.launch {
-            val resultado = medicacaoRepository.explicarMedicamentoComIa(nome)
+            val resultado = medicacaoRepository.explicarMedicamentoComIa(nome, principioAtivo, finalidade)
             resultado.onSuccess { explicacao ->
                 _uiState.update { it.copy(aCarregarIa = false, explicacaoIa = explicacao) }
             }.onFailure { erro ->

@@ -107,8 +107,11 @@ class MedicacaoRepository(
         atualizarMedicamento(perfil, medAtualizado)
     }
 
-    suspend fun explicarMedicamentoComIa(nomeMedicamento: String): Result<String> =
-        integracaoIa.explicarMedicamento(nomeMedicamento)
+    suspend fun explicarMedicamentoComIa(
+        nomeMedicamento: String,
+        principioAtivo: String = "",
+        finalidade: String = "",
+    ): Result<String> = integracaoIa.explicarMedicamento(nomeMedicamento, principioAtivo, finalidade)
 
     fun sincronizarPendentes(idPerfil: String) {
         val pendentes = dbLocal.medicamentoDao().obterPendentes()

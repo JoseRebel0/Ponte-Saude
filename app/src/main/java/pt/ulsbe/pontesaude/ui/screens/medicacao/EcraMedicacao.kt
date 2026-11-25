@@ -191,7 +191,7 @@ fun EcraMedicacao(
             avisoSemInternetMedicacao = true
         } else {
             medParaExplicarIa = med
-            viewModel?.pedirExplicacaoIa(med.nome)
+            viewModel?.pedirExplicacaoIa(med.nome, med.principioAtivo, med.finalidade)
         }
     }
 
