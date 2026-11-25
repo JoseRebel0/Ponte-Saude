@@ -2,6 +2,7 @@
 
 package pt.ulsbe.pontesaude.ui.screens.inicio
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,15 +23,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.HeadsetMic
 import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,7 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,9 +55,11 @@ import androidx.compose.ui.unit.dp
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
+import pt.ulsbe.pontesaude.ui.components.iconeSeparadorDrawable
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
 import pt.ulsbe.pontesaude.ui.components.BannerModoCuidadorInicio
 import pt.ulsbe.pontesaude.ui.components.BarraScrollLateralSuave
@@ -73,7 +70,7 @@ import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
 import pt.ulsbe.pontesaude.ui.theme.MarcaMedio
 import pt.ulsbe.pontesaude.ui.theme.TemaPonteSaude
 
-private data class Atalho(val rotulo: String, val icone: ImageVector, val acao: () -> Unit)
+private data class Atalho(val rotulo: String, @DrawableRes val iconeRes: Int, val acao: () -> Unit)
 
 /**
  * Ecrã Principal da aplicação com o Cartão de Emergência, atalhos rápidos e próxima consulta.
@@ -109,14 +106,24 @@ fun EcraInicio(
 
 
     val atalhos = listOf(
-        Atalho("Linha SNS 24", Icons.Rounded.HeadsetMic) {
+        Atalho("Linha SNS 24", R.drawable.ic_nav_sns24) {
             viewModel?.ligarSaude24(plataforma) ?: plataforma.marcarNumero("808242424")
         },
-        Atalho("Receitas", Icons.AutoMirrored.Rounded.ReceiptLong) { navegarPara(SeparadorApp.MEDICACAO) },
-        Atalho("Consultas/Exames", Icons.Rounded.CalendarMonth) { navegarPara(SeparadorApp.CONSULTAS) },
-        Atalho("Segurança do Utente", Icons.Rounded.Favorite) { navegarPara(SeparadorApp.SAUDE) },
-        Atalho("Apontamentos", Icons.Rounded.Description) { navegarPara(SeparadorApp.NOTAS) },
-        Atalho("Definições", Icons.Rounded.Settings) { navegarPara(SeparadorApp.DEFINICOES) },
+        Atalho("Consultas", iconeSeparadorDrawable(SeparadorApp.CONSULTAS)) {
+            navegarPara(SeparadorApp.CONSULTAS)
+        },
+        Atalho("Medicação", iconeSeparadorDrawable(SeparadorApp.MEDICACAO)) {
+            navegarPara(SeparadorApp.MEDICACAO)
+        },
+        Atalho("Saúde", iconeSeparadorDrawable(SeparadorApp.SAUDE)) {
+            navegarPara(SeparadorApp.SAUDE)
+        },
+        Atalho("Apontamentos", iconeSeparadorDrawable(SeparadorApp.NOTAS)) {
+            navegarPara(SeparadorApp.NOTAS)
+        },
+        Atalho("Definições", iconeSeparadorDrawable(SeparadorApp.DEFINICOES)) {
+            navegarPara(SeparadorApp.DEFINICOES)
+        },
     )
 
     val estadoLista = rememberLazyListState()
@@ -233,7 +240,12 @@ fun EcraInicio(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
                                     Box(Modifier.size(76.dp).background(Marca, CircleShape), contentAlignment = Alignment.Center) {
-                                        Icon(atalho.icone, null, tint = MarcaClaro, modifier = Modifier.size(32.dp))
+                                        Icon(
+                                            painter = painterResource(atalho.iconeRes),
+                                            contentDescription = atalho.rotulo,
+                                            tint = MarcaClaro,
+                                            modifier = Modifier.size(34.dp),
+                                        )
                                     }
                                     Spacer(Modifier.height(7.dp))
                                     Text(

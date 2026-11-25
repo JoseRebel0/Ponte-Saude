@@ -60,6 +60,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.Perfil
@@ -130,7 +131,7 @@ fun EcraConsultas(
     val subtituloEcra = if (modoCuidador) "Conta de ${perfilAtivo.nome} (Modo Cuidador)" else "Agenda e exames"
 
     Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra(tituloEcra, subtituloEcra, perfilAtivo.iniciais)
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfilAtivo.iniciais, iconeRes = R.drawable.ic_nav_consultas)
 
         PullToRefreshBox(
             isRefreshing = aAtualizar,

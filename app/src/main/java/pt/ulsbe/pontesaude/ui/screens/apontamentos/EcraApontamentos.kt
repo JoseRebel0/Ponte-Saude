@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Nota
 import pt.ulsbe.pontesaude.model.Perfil
@@ -237,7 +238,7 @@ fun EcraApontamentos(
     val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Tradutor IA & Apontamentos"
 
     Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais, iconeRes = R.drawable.ic_nav_notas)
 
         PullToRefreshBox(
             isRefreshing = aAtualizar,

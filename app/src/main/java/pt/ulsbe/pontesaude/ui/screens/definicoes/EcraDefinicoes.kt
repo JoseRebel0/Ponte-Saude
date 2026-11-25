@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.util.ServicosDispositivo
@@ -110,7 +111,7 @@ fun EcraDefinicoes(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
         item {
-            CabecalhoEcra("Definições", "Acessibilidade e preferências", perfil.iniciais)
+            CabecalhoEcra("Definições", "Acessibilidade e preferências", perfil.iniciais, iconeRes = R.drawable.ic_nav_definicoes)
         }
         item {
             Box(Modifier.padding(horizontal = 20.dp)) {
