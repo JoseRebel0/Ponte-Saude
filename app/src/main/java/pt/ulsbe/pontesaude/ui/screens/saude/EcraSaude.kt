@@ -87,6 +87,7 @@ import pt.ulsbe.pontesaude.data.repository.calcularNivelSeguranca
 import pt.ulsbe.pontesaude.model.CategoriaChecklist
 import pt.ulsbe.pontesaude.model.ItemChecklist
 import pt.ulsbe.pontesaude.model.ModuloSaude
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.RecompensaSeguranca
 import pt.ulsbe.pontesaude.model.SeparadorApp
@@ -117,7 +118,6 @@ fun EcraSaude(
     idModuloAberto: String?,
     viewModel: SaudeViewModel? = null,
     concluidos: List<String> = emptyList(),
-    saudeRepository: SaudeRepository? = null,
     perfilRepository: PerfilRepository? = null,
     plataforma: ServicosDispositivo,
     aoAbrirModulo: (String?) -> Unit,
@@ -158,7 +158,7 @@ fun EcraSaude(
     val estadoLista = rememberLazyListState()
 
     Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais, iconeRes = R.drawable.ic_nav_saude)
 
         PullToRefreshBox(
             isRefreshing = aAtualizar,

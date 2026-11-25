@@ -1,5 +1,6 @@
 package pt.ulsbe.pontesaude.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,9 +58,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import pt.ulsbe.pontesaude.ui.theme.Marca
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
@@ -78,6 +81,7 @@ fun CabecalhoEcra(
     subtitulo: String = "Ponte Saúde",
     iniciais: String,
     aoVoltar: (() -> Unit)? = null,
+    @DrawableRes iconeRes: Int? = null,
 ) {
     Row(
         modifier = Modifier
@@ -87,7 +91,7 @@ fun CabecalhoEcra(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top,
     ) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             if (aoVoltar != null) {
                 IconButton(
                     onClick = aoVoltar,
@@ -96,6 +100,21 @@ fun CabecalhoEcra(
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Voltar", tint = Color.White)
                 }
                 Spacer(Modifier.size(10.dp))
+            } else if (iconeRes != null) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color.White.copy(alpha = 0.16f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(iconeRes),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Spacer(Modifier.size(12.dp))
             }
             Column {
                 Text(subtitulo, color = Color.White.copy(alpha = 0.72f))
@@ -171,6 +190,16 @@ fun LinhaDefinicao(
         }
         Switch(checked = selecionado, onCheckedChange = aoMudarSelecao)
     }
+}
+
+@DrawableRes
+fun iconeSeparadorDrawable(separador: SeparadorApp): Int = when (separador) {
+    SeparadorApp.INICIO -> R.drawable.ic_nav_inicio
+    SeparadorApp.SAUDE -> R.drawable.ic_nav_saude
+    SeparadorApp.CONSULTAS -> R.drawable.ic_nav_consultas
+    SeparadorApp.MEDICACAO -> R.drawable.ic_nav_medicacao
+    SeparadorApp.NOTAS -> R.drawable.ic_nav_notas
+    SeparadorApp.DEFINICOES -> R.drawable.ic_nav_definicoes
 }
 
 fun iconeSeparador(separador: SeparadorApp): ImageVector = when (separador) {

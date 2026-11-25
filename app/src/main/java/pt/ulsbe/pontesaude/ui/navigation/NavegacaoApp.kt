@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -26,7 +27,10 @@ import pt.ulsbe.pontesaude.data.repository.AppContainer
 import pt.ulsbe.pontesaude.model.Consulta
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import pt.ulsbe.pontesaude.ui.components.iconeSeparador
+import pt.ulsbe.pontesaude.ui.components.iconeSeparadorDrawable
 import pt.ulsbe.pontesaude.ui.screens.EcraSemInternetPrimeiraVez
 import pt.ulsbe.pontesaude.ui.screens.inicio.InicioViewModel
 import pt.ulsbe.pontesaude.ui.screens.consultas.ConsultasViewModel
@@ -172,7 +176,13 @@ fun NavegacaoApp(container: AppContainer, plataforma: ServicosDispositivo) {
                             NavigationBarItem(
                                 selected = separador == destino,
                                 onClick = { navegarPara(destino) },
-                                icon = { Icon(iconeSeparador(destino), rotulo) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(iconeSeparadorDrawable(destino)),
+                                        contentDescription = rotulo,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                },
                                 label = { Text(rotulo) },
                             )
                         }
@@ -265,7 +275,13 @@ fun PreVisualizacaoNavegacaoApp() {
                         NavigationBarItem(
                             selected = item == SeparadorApp.INICIO,
                             onClick = {},
-                            icon = { Icon(iconeSeparador(item), contentDescription = rotulo) },
+                            icon = {
+                                Icon(
+                                    painter = painterResource(iconeSeparadorDrawable(item)),
+                                    contentDescription = rotulo,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            },
                             label = { Text(rotulo) },
                         )
                     }

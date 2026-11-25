@@ -97,6 +97,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.util.ProcessadorImagem
 import pt.ulsbe.pontesaude.model.Medicamento
 import pt.ulsbe.pontesaude.model.Perfil
@@ -262,7 +263,7 @@ fun EcraMedicacao(
     val subtituloEcra = if (modoCuidadorAtivo) "Conta de ${perfil.nome} (Modo Cuidador)" else "Gestor visual e alarmes"
 
     Column(Modifier.fillMaxSize()) {
-        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais)
+        CabecalhoEcra(tituloEcra, subtituloEcra, perfil.iniciais, iconeRes = R.drawable.ic_nav_medicacao)
 
         PullToRefreshBox(
             isRefreshing = aAtualizar,
