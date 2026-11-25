@@ -141,6 +141,17 @@ fun EcraLoginCMD(
     var mensagemErro by remember { mutableStateOf<String?>(null) }
     var mostrarAjuda by remember { mutableStateOf(false) }
 
+    var emProgresso by remember { mutableStateOf(false) }
+    var textoProgresso by remember { mutableStateOf("A contactar Chave Móvel Digital...") }
+    var aCriarPerfil by remember { mutableStateOf(false) }
+    var aApagarPerfis by remember { mutableStateOf(false) }
+    var mensagemSucesso by remember { mutableStateOf<String?>(null) }
+
+    val estaACriar = uiState?.aCriarPerfil == true || aCriarPerfil
+    val estaAApagar = uiState?.aApagarPerfis == true || aApagarPerfis
+    val mensagemSucessoEfetiva = mensagemSucesso ?: uiState?.mensagemSucesso
+    val mensagemErroEfetiva = mensagemErro ?: uiState?.mensagemErro
+
     // Sincronizar seleção se um perfil for apagado ou atualizado no Firestore em tempo real
     LaunchedEffect(perfisDemonstracao.size) {
         if (perfisDemonstracao.isNotEmpty() && perfisDemonstracao.none { it.id == perfilEscolhidoId }) {
@@ -152,11 +163,31 @@ fun EcraLoginCMD(
         }
     }
 
-    var emProgresso by remember { mutableStateOf(false) }
-    var textoProgresso by remember { mutableStateOf("A contactar Chave Móvel Digital...") }
-    var aCriarPerfil by remember { mutableStateOf(false) }
-    var aApagarPerfis by remember { mutableStateOf(false) }
-    var mensagemSucesso by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState?.perfilSelecionadoId) {
+        val id = uiState?.perfilSelecionadoId
+        if (!id.isNullOrBlank()) {
+            val perfilAlvo = perfisDemonstracao.firstOrNull { it.id == id }
+            if (perfilAlvo != null) {
+                perfilEscolhidoId = id
+                telemovel = perfilAlvo.telemovel.replace("+351 ", "")
+                nif = perfilAlvo.nif
+            }
+        }
+    }
+
+    LaunchedEffect(uiState?.mensagemSucesso) {
+        val msg = uiState?.mensagemSucesso
+        if (!msg.isNullOrBlank()) {
+            mensagemSucesso = msg
+        }
+    }
+
+    LaunchedEffect(uiState?.mensagemErro) {
+        val msg = uiState?.mensagemErro
+        if (!msg.isNullOrBlank()) {
+            mensagemErro = msg
+        }
+    }
 
     // Procedimento de Login Simulado com Feedback de Carregamento e Firebase Auth Seguro
     fun executarAutenticacao(idPerfil: String) {
@@ -816,8 +847,44 @@ fun EcraLoginCMD(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
 
+                            // Feedback visual destacado: Perfil a ser gerado
+                            if (estaACriar) {
+                                Surface(
+                                    color = MarcaMedio.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.5.dp, MarcaMedio.copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = MarcaMedio,
+                                            strokeWidth = 2.5.dp,
+                                        )
+                                        Spacer(Modifier.width(14.dp))
+                                        Column {
+                                            Text(
+                                                text = "A criar perfil clínico com IA...",
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MarcaMedio,
+                                            )
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                text = "A gerar dados médicos realistas e a guardar no Firebase. Aguarde um momento...",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
                             // Seletor de Perfis de Teste
-                            if (perfisDemonstracao.isEmpty()) {
+                            if (perfisDemonstracao.isEmpty() && !estaACriar) {
                                 Surface(
                                     color = Superficie,
                                     shape = RoundedCornerShape(12.dp),
@@ -928,22 +995,25 @@ fun EcraLoginCMD(
                                 onClick = {
                                     aCriarPerfil = true
                                     mensagemSucesso = null
+                                    mensagemErro = null
                                     escopo.launch {
                                         try {
-                                            if (viewModel != null) {
+                                            val criado = if (viewModel != null) {
                                                 viewModel.criarPerfilAleatorio()
                                             } else {
-                                                val criado = perfilRepository?.criarPerfilAleatorio()
-                                                if (criado != null) {
-                                                    perfilEscolhidoId = criado.id
-                                                    telemovel = criado.telemovel.replace("+351 ", "")
-                                                    nif = criado.nif
-                                                    pinCMD = "1234"
-                                                    mensagemSucesso = "Perfil '${criado.nome}' gerado pela IA com sucesso!"
-                                                }
+                                                perfilRepository?.criarPerfilAleatorio()
                                             }
+                                            if (criado != null) {
+                                                perfilEscolhidoId = criado.id
+                                                telemovel = criado.telemovel.replace("+351 ", "")
+                                                nif = criado.nif
+                                                pinCMD = "1234"
+                                                mensagemSucesso = "Perfil '${criado.nome}' gerado com sucesso e pronto a usar!"
+                                            }
+                                            perfilRepository?.carregarPerfisLocais()
+                                            sincronizador?.perfil?.carregarPerfisLocais()
                                         } catch (e: Exception) {
-                                            mensagemSucesso = "Erro ao criar perfil: ${e.localizedMessage}"
+                                            mensagemErro = "Erro ao criar perfil: ${e.localizedMessage}"
                                         } finally {
                                             aCriarPerfil = false
                                         }
@@ -954,9 +1024,9 @@ fun EcraLoginCMD(
                                     .height(48.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MarcaMedio),
-                                enabled = !aCriarPerfil && !aApagarPerfis,
+                                enabled = !estaACriar && !estaAApagar,
                             ) {
-                                if (aCriarPerfil) {
+                                if (estaACriar) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(18.dp),
                                         color = Color.White,
@@ -977,6 +1047,7 @@ fun EcraLoginCMD(
                                     onClick = {
                                         aApagarPerfis = true
                                         mensagemSucesso = null
+                                        mensagemErro = null
                                         escopo.launch {
                                             try {
                                                 if (viewModel != null) {
@@ -984,6 +1055,8 @@ fun EcraLoginCMD(
                                                 } else {
                                                     perfilRepository?.apagarPerfisAleatorios()
                                                 }
+                                                perfilRepository?.carregarPerfisLocais()
+                                                sincronizador?.perfil?.carregarPerfisLocais()
                                                 val rest = perfisDemonstracao.firstOrNull { it.id in setOf("1", "2") } ?: perfisDemonstracao.firstOrNull()
                                                 perfilEscolhidoId = rest?.id ?: "1"
                                                 if (rest != null) {
@@ -992,7 +1065,7 @@ fun EcraLoginCMD(
                                                 }
                                                 mensagemSucesso = "Perfis de teste eliminados com sucesso."
                                             } catch (e: Exception) {
-                                                mensagemSucesso = "Erro ao apagar perfis: ${e.localizedMessage}"
+                                                mensagemErro = "Erro ao apagar perfis: ${e.localizedMessage}"
                                             } finally {
                                                 aApagarPerfis = false
                                             }
@@ -1006,9 +1079,9 @@ fun EcraLoginCMD(
                                         contentColor = Color(0xFFDC2626),
                                     ),
                                     border = BorderStroke(1.2.dp, Color(0xFFFCA5A5)),
-                                    enabled = !aApagarPerfis && !aCriarPerfil,
+                                    enabled = !estaAApagar && !estaACriar,
                                 ) {
-                                    if (aApagarPerfis) {
+                                    if (estaAApagar) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
                                             color = Color(0xFFDC2626),
@@ -1029,10 +1102,11 @@ fun EcraLoginCMD(
                                 }
                             }
 
-                            if (mensagemSucesso != null) {
+                            if (mensagemSucessoEfetiva != null && !estaACriar) {
                                 Surface(
                                     color = Color(0xFFE8F5E9),
                                     shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Row(
@@ -1041,7 +1115,25 @@ fun EcraLoginCMD(
                                     ) {
                                         Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(8.dp))
-                                        Text(mensagemSucesso ?: "", color = Color(0xFF1B5E20), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                        Text(mensagemSucessoEfetiva, color = Color(0xFF1B5E20), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+
+                            if (mensagemErroEfetiva != null && !estaACriar) {
+                                Surface(
+                                    color = Color(0xFFFFEBEE),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFEF9A9A)),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(mensagemErroEfetiva, color = Color(0xFFB71C1C), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                                     }
                                 }
                             }

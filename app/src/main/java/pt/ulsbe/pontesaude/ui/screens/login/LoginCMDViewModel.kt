@@ -78,50 +78,52 @@ class LoginCMDViewModel(
      * Cria um novo perfil aleatório com nomes, NIFs e medicamentos aprovados pelo Infarmed em Portugal.
      * Guarda o registo no Room e na Cloud Firestore.
      */
-    fun criarPerfilAleatorio() {
+    suspend fun criarPerfilAleatorio(): pt.ulsbe.pontesaude.model.Perfil? {
         _uiState.update { it.copy(aCriarPerfil = true, mensagemSucesso = null, mensagemErro = null) }
-        viewModelScope.launch {
-            try {
-                val criado = perfilRepository.criarPerfilAleatorio()
-                _uiState.update {
-                    it.copy(
-                        aCriarPerfil = false,
-                        perfilSelecionadoId = criado.id,
-                        mensagemSucesso = "Perfil '${criado.nome}' criado com sucesso no Firebase!",
-                    )
-                }
-                recarregar()
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        aCriarPerfil = false,
-                        mensagemErro = "Erro ao criar perfil: ${e.localizedMessage}",
-                    )
-                }
+        return try {
+            val criado = perfilRepository.criarPerfilAleatorio()
+            perfilRepository.carregarPerfisLocais()
+            val perfisAtualizados = perfilRepository.todosOsPerfis.toList()
+            _uiState.update {
+                it.copy(
+                    aCriarPerfil = false,
+                    perfisDisponiveis = perfisAtualizados,
+                    perfilSelecionadoId = criado.id,
+                    mensagemSucesso = "Perfil '${criado.nome}' criado com sucesso no Firebase!",
+                )
             }
+            criado
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    aCriarPerfil = false,
+                    mensagemErro = "Erro ao criar perfil: ${e.localizedMessage ?: "Falha na comunicação"}",
+                )
+            }
+            null
         }
     }
 
     /**
-     * Remove um perfil específico e limpa o registo do Room, Firestore e Firebase Authentication.
+     * Remove um perfil específico e limpa o registo do Room e Firestore.
      */
-    fun apagarPerfil(idPerfil: String) {
+    suspend fun apagarPerfil(idPerfil: String) {
         _uiState.update { it.copy(mensagemSucesso = null, mensagemErro = null) }
-        viewModelScope.launch {
-            try {
-                perfilRepository.apagarPerfil(idPerfil)
-                recarregar()
-                val restante = _uiState.value.perfisDisponiveis.firstOrNull()
-                _uiState.update {
-                    it.copy(
-                        perfilSelecionadoId = restante?.id ?: "1",
-                        mensagemSucesso = "Perfil apagado com sucesso.",
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(mensagemErro = "Erro ao apagar perfil: ${e.localizedMessage}")
-                }
+        try {
+            perfilRepository.apagarPerfil(idPerfil)
+            perfilRepository.carregarPerfisLocais()
+            val perfisAtualizados = perfilRepository.todosOsPerfis.toList()
+            val restante = perfisAtualizados.firstOrNull()
+            _uiState.update {
+                it.copy(
+                    perfisDisponiveis = perfisAtualizados,
+                    perfilSelecionadoId = restante?.id ?: "1",
+                    mensagemSucesso = "Perfil apagado com sucesso.",
+                )
+            }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(mensagemErro = "Erro ao apagar perfil: ${e.localizedMessage}")
             }
         }
     }
@@ -129,25 +131,27 @@ class LoginCMDViewModel(
     /**
      * Remove todos os perfis gerados aleatoriamente, preservando os perfis essenciais da demonstração.
      */
-    fun limparPerfisDemonstracao() {
+    suspend fun limparPerfisDemonstracao() {
         _uiState.update { it.copy(aApagarPerfis = true, mensagemSucesso = null, mensagemErro = null) }
-        viewModelScope.launch {
-            try {
-                val apagados = perfilRepository.apagarPerfisAleatorios()
-                _uiState.update {
-                    it.copy(
-                        aApagarPerfis = false,
-                        mensagemSucesso = "Foram removidos $apagados perfis de teste.",
-                    )
-                }
-                recarregar()
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        aApagarPerfis = false,
-                        mensagemErro = "Erro ao limpar perfis: ${e.localizedMessage}",
-                    )
-                }
+        try {
+            val apagados = perfilRepository.apagarPerfisAleatorios()
+            perfilRepository.carregarPerfisLocais()
+            val perfisAtualizados = perfilRepository.todosOsPerfis.toList()
+            val restante = perfisAtualizados.firstOrNull()
+            _uiState.update {
+                it.copy(
+                    aApagarPerfis = false,
+                    perfisDisponiveis = perfisAtualizados,
+                    perfilSelecionadoId = restante?.id ?: "1",
+                    mensagemSucesso = "Foram removidos $apagados perfis de teste.",
+                )
+            }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    aApagarPerfis = false,
+                    mensagemErro = "Erro ao limpar perfis: ${e.localizedMessage}",
+                )
             }
         }
     }

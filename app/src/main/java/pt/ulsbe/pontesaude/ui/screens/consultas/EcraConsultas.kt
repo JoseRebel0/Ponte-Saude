@@ -293,6 +293,13 @@ fun EcraConsultas(
                                     }
                                     TextButton(
                                         onClick = {
+                                            val inserido = plataforma.sincronizarConsultaNoCalendario(
+                                                titulo = selecionada.titulo,
+                                                descricao = "Consulta no Serviço Nacional de Saúde (ULSBE). Recomendações: Levar Cartão de Cidadão, medicação e exames.",
+                                                localizacao = selecionada.localizacao,
+                                                dia = selecionada.dia,
+                                                mes = selecionada.mes,
+                                            )
                                             plataforma.adicionarConsultaAoCalendario(
                                                 selecionada.titulo,
                                                 "Consulta no Serviço Nacional de Saúde (ULSBE). Recomendações: Levar Cartão de Cidadão, medicação e exames.",
@@ -500,6 +507,24 @@ fun EcraConsultas(
                             jejum = precisaJejum,
                         )
                         viewModel?.agendarConsulta(nova)
+                        if (agendaAtiva) {
+                            val inserido = plataforma.sincronizarConsultaNoCalendario(
+                                titulo = nova.titulo,
+                                descricao = "Consulta no Serviço Nacional de Saúde (${nova.tipo}) na ULSBE.",
+                                localizacao = nova.localizacao,
+                                dia = nova.dia,
+                                mes = nova.mes,
+                            )
+                            if (!inserido) {
+                                plataforma.adicionarConsultaAoCalendario(
+                                    nova.titulo,
+                                    "Consulta no Serviço Nacional de Saúde (${nova.tipo}) na ULSBE.",
+                                    nova.localizacao,
+                                    nova.dia,
+                                    nova.mes,
+                                )
+                            }
+                        }
                         idSelecionado = novoId
                         mostrarDialogoNovaConsulta = false
                     },

@@ -734,8 +734,8 @@ fun EcraMedicacao(
                                                         val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
                                                         val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
                                                         plataforma.agendarAlarmeMedicacao(medicamento.id * 100L + idx, medicamento.nome, medicamento.finalidade, h, m)
-                                                        plataforma.definirAlarmeRelogio(h, m, "Tomar ${medicamento.nome}")
                                                     }
+                                                    plataforma.sincronizarAlarmesNoRelogio(medicamento)
                                                 }
                                             },
                                             colors = SwitchDefaults.colors(
@@ -1227,9 +1227,9 @@ fun EcraMedicacao(
                             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
                             val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
                             plataforma.agendarAlarmeMedicacao(medSalvo.id * 100L + idx, medSalvo.nome, medSalvo.finalidade, h, m)
-                            plataforma.definirAlarmeRelogio(h, m, "Tomar ${medSalvo.nome}")
                         }
-                        mensagemAlarme = "⏰ Medicamento guardado com ${medSalvo.listaHorarios.size} alarme(s) programado(s)!"
+                        plataforma.sincronizarAlarmesNoRelogio(medSalvo)
+                        mensagemAlarme = "Medicamento guardado com ${medSalvo.listaHorarios.size} alarme(s) programado(s)!"
                     }
                 } else {
                     // Atualizar existente
@@ -1244,11 +1244,11 @@ fun EcraMedicacao(
                             val h = partes.getOrNull(0)?.toIntOrNull() ?: 8
                             val m = partes.getOrNull(1)?.toIntOrNull() ?: 0
                             plataforma.agendarAlarmeMedicacao(medSalvo.id * 100L + idx, medSalvo.nome, medSalvo.finalidade, h, m)
-                            plataforma.definirAlarmeRelogio(h, m, "Tomar ${medSalvo.nome}")
                         }
-                        mensagemAlarme = "✅ Medicamento «${medSalvo.nome}» atualizado com ${medSalvo.listaHorarios.size} alarme(s) sincronizado(s)!"
+                        plataforma.sincronizarAlarmesNoRelogio(medSalvo)
+                        mensagemAlarme = "Medicamento «${medSalvo.nome}» atualizado com ${medSalvo.listaHorarios.size} alarme(s) sincronizado(s)!"
                     } else {
-                        mensagemAlarme = "✅ Medicamento «${medSalvo.nome}» atualizado com sucesso!"
+                        mensagemAlarme = "Medicamento «${medSalvo.nome}» atualizado com sucesso!"
                     }
                 }
                 mostrarDialogoFormulario = false
