@@ -21,7 +21,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonAddAlt1
 import androidx.compose.material.icons.rounded.PhoneAndroid
@@ -61,6 +60,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pt.ulsbe.pontesaude.data.repository.PerfilRepository
+import androidx.compose.ui.res.painterResource
+import pt.ulsbe.pontesaude.R
 import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.ui.screens.definicoes.DefinicoesViewModel
 import pt.ulsbe.pontesaude.ui.screens.inicio.InicioViewModel
@@ -779,7 +780,12 @@ fun SecaoModoCuidador(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.FamilyRestroom, null, tint = MarcaMedio, modifier = Modifier.size(20.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_modo_cuidador),
+                            contentDescription = null,
+                            tint = MarcaMedio,
+                            modifier = Modifier.size(20.dp),
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Perfis que eu cuido",

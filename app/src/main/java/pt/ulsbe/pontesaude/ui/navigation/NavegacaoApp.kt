@@ -29,7 +29,6 @@ import pt.ulsbe.pontesaude.model.Perfil
 import pt.ulsbe.pontesaude.model.SeparadorApp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import pt.ulsbe.pontesaude.ui.components.iconeSeparador
 import pt.ulsbe.pontesaude.ui.components.iconeSeparadorDrawable
 import pt.ulsbe.pontesaude.ui.screens.EcraSemInternetPrimeiraVez
 import pt.ulsbe.pontesaude.ui.screens.inicio.InicioViewModel

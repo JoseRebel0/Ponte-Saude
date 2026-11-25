@@ -99,7 +99,9 @@ import pt.ulsbe.pontesaude.ui.components.BotaoOuvir
 import pt.ulsbe.pontesaude.ui.components.CabecalhoEcra
 import pt.ulsbe.pontesaude.ui.components.CartaoApp
 import pt.ulsbe.pontesaude.ui.components.ChecklistInterativa
+import androidx.compose.ui.res.painterResource
 import pt.ulsbe.pontesaude.ui.components.iconeModulo
+import pt.ulsbe.pontesaude.ui.components.iconeModuloDrawable
 import pt.ulsbe.pontesaude.ui.theme.Atenuado
 import pt.ulsbe.pontesaude.ui.theme.Marca
 import pt.ulsbe.pontesaude.ui.theme.MarcaClaro
@@ -479,7 +481,7 @@ fun EcraSaude(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                iconeModulo(item.icone),
+                                painter = painterResource(iconeModuloDrawable(item.icone)),
                                 contentDescription = null,
                                 tint = if (concluido) Color(0xFF15803D) else MarcaMedio,
                                 modifier = Modifier.size(24.dp),
@@ -1103,7 +1105,12 @@ private fun ModuloResumo(
                         Modifier.fillMaxWidth().padding(top = 7.dp).clickable { aoAbrir(modulo.id) }.padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(iconeModulo(modulo.icone), null, tint = MarcaClaro)
+                        Icon(
+                            painter = painterResource(iconeModuloDrawable(modulo.icone)),
+                            contentDescription = null,
+                            tint = MarcaClaro,
+                            modifier = Modifier.size(24.dp),
+                        )
                         Spacer(Modifier.size(8.dp))
                         Text(modulo.titulo, Modifier.weight(1f))
                         Icon(Icons.Rounded.ChevronRight, null)

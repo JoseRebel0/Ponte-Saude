@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ListAlt
 import androidx.compose.material.icons.automirrored.rounded.Message
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.AccessibilityNew
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Badge
@@ -159,7 +158,12 @@ fun BotaoOuvir(
         onClick = aoClicar,
         modifier = modifier.background(MarcaMedio, CircleShape).height(48.dp),
     ) {
-        Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = Color.White)
+        Icon(
+            painter = painterResource(R.drawable.ic_ouvir_fala),
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(20.dp),
+        )
         Spacer(Modifier.size(8.dp))
         Text(rotulo, color = Color.White, fontWeight = FontWeight.SemiBold)
     }
@@ -170,11 +174,12 @@ fun BotaoOuvir(
  */
 @Composable
 fun LinhaDefinicao(
-    icone: ImageVector,
+    icone: ImageVector? = null,
     titulo: String,
     subtitulo: String,
     selecionado: Boolean,
     aoMudarSelecao: (Boolean) -> Unit,
+    @DrawableRes iconeRes: Int? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -182,7 +187,11 @@ fun LinhaDefinicao(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.size(48.dp).background(Marca, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icone, null, tint = MarcaClaro)
+            if (iconeRes != null) {
+                Icon(painter = painterResource(iconeRes), null, tint = MarcaClaro, modifier = Modifier.size(24.dp))
+            } else if (icone != null) {
+                Icon(icone, null, tint = MarcaClaro)
+            }
         }
         Column(Modifier.weight(1f)) {
             Text(titulo, fontWeight = FontWeight.SemiBold)
@@ -209,6 +218,25 @@ fun iconeSeparador(separador: SeparadorApp): ImageVector = when (separador) {
     SeparadorApp.MEDICACAO -> Icons.Rounded.Medication
     SeparadorApp.NOTAS -> Icons.Rounded.Description
     SeparadorApp.DEFINICOES -> Icons.Rounded.Settings
+}
+
+@DrawableRes
+fun iconeModuloDrawable(nome: String): Int = when (nome.lowercase().trim()) {
+    "badge", "pulseira", "identificacao" -> R.drawable.ic_modulo_pulseira
+    "steps", "elderly", "quedas", "andar", "passos" -> R.drawable.ic_modulo_quedas
+    "hand", "clean_hands", "maos", "higiene" -> R.drawable.ic_modulo_maos
+    "bed", "cama", "ulceras", "pressao" -> R.drawable.ic_modulo_cama
+    "vaccine", "vaccines", "vacina", "vacinas" -> R.drawable.ic_modulo_vacina
+    "pill", "medication", "medicamento", "remedio", "remedios" -> R.drawable.ic_nav_medicacao
+    "checklist", "lista", "notas", "apontamentos" -> R.drawable.ic_nav_notas
+    "warning", "shield", "seguranca" -> R.drawable.ic_seguranca_gov
+    "phone", "sns24", "chamada" -> R.drawable.ic_nav_sns24
+    "camera", "foto" -> R.drawable.ic_foto_caixa
+    "message", "comunicacao", "perguntas", "conversa", "dialogo", "chat", "forum" -> R.drawable.ic_modulo_comunicacao
+    "ouvir", "som", "voz", "audio", "leitura" -> R.drawable.ic_ouvir_fala
+    "alarm", "alarme", "relogio", "hora" -> R.drawable.ic_alarme_relogio
+    "heart", "coracao", "saude", "info" -> R.drawable.ic_nav_saude
+    else -> R.drawable.ic_nav_saude
 }
 
 fun iconeModulo(nome: String): ImageVector = when (nome) {

@@ -35,7 +35,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Medication
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -118,10 +117,10 @@ fun EcraDefinicoes(
                 CartaoApp {
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         LinhaDefinicao(
-                            Icons.Rounded.TextFields,
-                            "Texto maior",
-                            "Aumenta o texto em toda a aplicação",
-                            uiState?.textoGrande ?: false,
+                            iconeRes = R.drawable.ic_texto_grande,
+                            titulo = "Texto maior",
+                            subtitulo = "Aumenta o texto em toda a aplicação",
+                            selecionado = uiState?.textoGrande ?: false,
                             aoMudarSelecao = { viewModel?.definirTextoGrande(it) },
                         )
                         HorizontalDivider(color = Superficie2)

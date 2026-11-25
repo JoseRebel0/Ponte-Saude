@@ -34,7 +34,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.SupervisorAccount
 import androidx.compose.material.icons.rounded.WifiOff
@@ -67,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -412,7 +412,13 @@ fun EcraApontamentos(
                                         }
                                     },
                                     modifier = Modifier.size(52.dp),
-                                ) { Icon(Icons.Rounded.Mic, "Ditar termo por voz") }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_microfone_voz),
+                                        contentDescription = "Ditar termo por voz",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(12.dp))
@@ -578,7 +584,13 @@ fun EcraApontamentos(
                                         }.onFailure { avisoNota = "Este telemóvel não suporta ditado. Escreva a dúvida." }
                                     },
                                     modifier = Modifier.size(52.dp),
-                                ) { Icon(Icons.Rounded.Mic, "Gravar dúvida por voz") }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_microfone_voz),
+                                        contentDescription = "Gravar dúvida por voz",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
 
                                 Button(
                                     onClick = {
