@@ -74,7 +74,6 @@ class AppContainer(context: Context) {
 
     init {
         carregarTudoDoRoomESincronizar()
-        iniciarEscutaTempoRealFirestore()
     }
 
     private fun carregarTudoDoRoomESincronizar() {
@@ -82,9 +81,12 @@ class AppContainer(context: Context) {
             saude.carregarCatalogoLocal()
             perfil.carregarPerfisLocais()
 
-            val ident = perfil.identificadorCMD
-            if (ident.isNotBlank() && !AutenticadorFirebaseCMD.estaAutenticado) {
-                runCatching { AutenticadorFirebaseCMD.autenticarComCMD(ident) }
+            if (!AutenticadorFirebaseCMD.estaAutenticado) {
+                runCatching { AutenticadorFirebaseCMD.garantirSessaoAnonima() }
+            }
+
+            withContext(Dispatchers.Main) {
+                iniciarEscutaTempoRealFirestore()
             }
 
             for (p in perfil.todosOsPerfis) {

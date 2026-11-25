@@ -1,22 +1,20 @@
 package pt.ulsbe.pontesaude.data.remote
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 /**
- * Autenticador transparente da Chave Móvel Digital (CMD) com o Firebase Authentication.
+ * Autenticador Firebase baseado em Autenticação Anónima por instalação/dispositivo.
  *
- * Mapeia o número de telemóvel ou NIF do utente inserido no ecrã da CMD para uma credencial
- * única e persistente no Firebase Auth, sem que o utilizador precise de saber ou ver emails e passwords.
- *
- * Garante que:
- * 1. Cada telemóvel/utente ganha um UID único e privado no Firebase.
- * 2. Cada utente só tem acesso de leitura/escrita aos seus próprios medicamentos e consultas.
- * 3. Se a app for reinstalada ou aberta noutro telemóvel com o mesmo número CMD, os dados são recuperados.
+ * Cada instalação da aplicação obtém um UID anónimo único e persistente no Firebase Auth.
+ * Esse UID é utilizado como "donoUid" dos perfis clínicos no Firestore, garantindo que
+ * cada utilizador acede exclusivamente aos perfis criados no seu telemóvel.
  */
 object AutenticadorFirebaseCMD {
+    private const val TAG = "AutenticadorFirebase"
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
 
     val uidAtual: String?
@@ -26,68 +24,62 @@ object AutenticadorFirebaseCMD {
         get() = auth.currentUser != null
 
     /**
-     * Mapeia de forma unívoca e determinística um identificador português (telemóvel ou NIF)
-     * para credenciais virtuais no Firebase Authentication.
+     * Garante que existe uma sessão anónima ativa no Firebase Auth.
+     * Se o utilizador já estiver autenticado nesta instalação, reutiliza o UID existente.
+     * Caso contrário, autentica anonimamente no Firebase.
+     */
+    suspend fun garantirSessaoAnonima(): String = withContext(Dispatchers.IO) {
+        val userAtual = auth.currentUser
+        if (userAtual != null) {
+            return@withContext userAtual.uid
+        }
+        try {
+            val res = auth.signInAnonymously().await()
+            val uid = res.user?.uid ?: auth.currentUser?.uid ?: ""
+            Log.d(TAG, "Sessão anónima iniciada com sucesso. UID: $uid")
+            uid
+        } catch (e: Exception) {
+            Log.e(TAG, "Erro ao autenticar anonimamente no Firebase", e)
+            auth.currentUser?.uid ?: ""
+        }
+    }
+
+    /**
+     * Mapeia credenciais virtuais (mantido para compatibilidade, sem envio de email/password).
      */
     fun obterCredenciaisVirtuais(identificador: String): Pair<String, String> {
         val idLimpo = identificador.replace(Regex("[^0-9a-zA-Z]"), "").lowercase().ifBlank { "utente_sns" }
-        val emailVirtual = "cmd_${idLimpo}@pontesaude.ulsbe.pt"
-        val senhaVirtual = "PonteSaude_CMD_${idLimpo}#2026"
-        return Pair(emailVirtual, senhaVirtual)
+        return Pair("cmd_${idLimpo}@pontesaude.ulsbe.pt", "PonteSaude_CMD_${idLimpo}#2026")
     }
 
     /**
-     * Regista uma nova conta no Firebase Authentication para o utente ou obtém o UID existente.
-     * Retorna o UID atribuído pela Firebase Authentication.
+     * Garante a sessão anónima do Firebase e retorna o UID do dispositivo.
      */
-    suspend fun criarOuObterConta(identificador: String): String = withContext(Dispatchers.IO) {
-        val (emailVirtual, senhaVirtual) = obterCredenciaisVirtuais(identificador)
-        val idLimpo = identificador.replace(Regex("[^0-9a-zA-Z]"), "").lowercase().ifBlank { "utente_sns" }
-
-        try {
-            val res = auth.createUserWithEmailAndPassword(emailVirtual, senhaVirtual).await()
-            res.user?.uid ?: idLimpo
-        } catch (_: Exception) {
-            try {
-                val res = auth.signInWithEmailAndPassword(emailVirtual, senhaVirtual).await()
-                res.user?.uid ?: idLimpo
-            } catch (_: Exception) {
-                auth.currentUser?.uid ?: java.util.UUID.randomUUID().toString()
-            }
-        }
+    suspend fun criarOuObterConta(identificador: String = ""): String = withContext(Dispatchers.IO) {
+        garantirSessaoAnonima()
     }
 
     /**
-     * Autentica no Firebase Auth com base no identificador da CMD (número de telemóvel ou NIF).
-     * Se a conta ainda não existir, é criada automaticamente.
+     * Autentica no Firebase Auth via sessão anónima da instalação.
      */
-    suspend fun autenticarComCMD(identificador: String): String = withContext(Dispatchers.IO) {
-        criarOuObterConta(identificador)
+    suspend fun autenticarComCMD(identificador: String = ""): String = withContext(Dispatchers.IO) {
+        garantirSessaoAnonima()
     }
 
     /**
-     * Elimina permanentemente o registo do utente da base de dados do Firebase Authentication.
+     * Na autenticação anónima por instalação, não apagamos a conta Auth do Firebase,
+     * pois a conta pertence ao dispositivo e serve de âncora a todos os dados.
      */
-    suspend fun eliminarContaAuth(identificador: String) = withContext(Dispatchers.IO) {
-        if (identificador.isBlank()) return@withContext
-        val (emailVirtual, senhaVirtual) = obterCredenciaisVirtuais(identificador)
-        try {
-            val usuarioAtual = auth.currentUser
-            if (usuarioAtual != null && usuarioAtual.email.equals(emailVirtual, ignoreCase = true)) {
-                usuarioAtual.delete().await()
-            } else {
-                val res = auth.signInWithEmailAndPassword(emailVirtual, senhaVirtual).await()
-                res.user?.delete()?.await()
-            }
-        } catch (_: Exception) {
-            // Conta já removida ou erro transitório
-        }
+    suspend fun eliminarContaAuth(identificador: String = "") = withContext(Dispatchers.IO) {
+        // Intencionalmente no-op: a sessão anónima da instalação é preservada.
     }
 
     /**
-     * Termina a sessão no Firebase Auth.
+     * O término de sessão na app é apenas local (limpar estado de sessão na UI).
+     * Não chamamos auth.signOut(), para preservar o UID anónimo da instalação
+     * e não perder o acesso aos documentos no Firestore.
      */
     fun terminarSessao() {
-        runCatching { auth.signOut() }
+        // Sessão Firebase Auth anónima mantida no dispositivo.
     }
 }
